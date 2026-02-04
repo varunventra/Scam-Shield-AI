@@ -1,0 +1,485 @@
+{
+  "api_base_url": "http://localhost:8000/api/v1/conversation",
+  "api_key": "hackathon-secret-key-2024",
+  "test_cases": [
+    {
+      "id": 1,
+      "name": "Bank Fraud - Urgency Tactics",
+      "description": "Tests detection of bank fraud with urgency and phone number",
+      "request": {
+        "sessionId": "test-bank-fraud-001",
+        "message": {
+          "sender": "scammer",
+          "text": "URGENT: Your SBI bank account 123456789012 will be blocked today. Call customer care immediately at +919876543210 to verify your identity.",
+          "timestamp": 1770005528731
+        },
+        "conversationHistory": [],
+        "metadata": {
+          "channel": "SMS",
+          "language": "English",
+          "locale": "IN"
+        }
+      },
+      "expected_intelligence": {
+        "bankAccounts": ["123456789012"],
+        "phoneNumbers": ["+919876543210"],
+        "suspiciousKeywords": ["urgent", "blocked", "verify"]
+      }
+    },
+    {
+      "id": 2,
+      "name": "UPI Fraud",
+      "description": "Tests detection of UPI fraud with payment request",
+      "request": {
+        "sessionId": "test-upi-fraud-001",
+        "message": {
+          "sender": "scammer",
+          "text": "Your UPI payment failed. To reactivate, send Rs.1 to scammer123@paytm and share the transaction ID.",
+          "timestamp": 1770005528731
+        },
+        "conversationHistory": [],
+        "metadata": {
+          "channel": "WhatsApp",
+          "language": "English",
+          "locale": "IN"
+        }
+      },
+      "expected_intelligence": {
+        "upiIds": ["scammer123@paytm"],
+        "suspiciousKeywords": ["failed", "reactivate"]
+      }
+    },
+    {
+      "id": 3,
+      "name": "Phishing Link",
+      "description": "Tests detection of phishing links",
+      "request": {
+        "sessionId": "test-phishing-001",
+        "message": {
+          "sender": "scammer",
+          "text": "Your account has been compromised. Click here immediately to secure it: http://fake-bank-security.com/verify?user=12345",
+          "timestamp": 1770005528731
+        },
+        "conversationHistory": [],
+        "metadata": {
+          "channel": "Email",
+          "language": "English",
+          "locale": "IN"
+        }
+      },
+      "expected_intelligence": {
+        "phishingLinks": ["http://fake-bank-security.com/verify?user=12345"],
+        "suspiciousKeywords": ["compromised", "immediately", "click"]
+      }
+    },
+    {
+      "id": 4,
+      "name": "Lottery Scam",
+      "description": "Tests detection of lottery/prize scams",
+      "request": {
+        "sessionId": "test-lottery-001",
+        "message": {
+          "sender": "scammer",
+          "text": "Congratulations! You have won 50 Lakh rupees in KBC Lucky Draw 2024. To claim, share your bank account details. Contact: 8765432109",
+          "timestamp": 1770005528731
+        },
+        "conversationHistory": [],
+        "metadata": {
+          "channel": "SMS",
+          "language": "English",
+          "locale": "IN"
+        }
+      },
+      "expected_intelligence": {
+        "phoneNumbers": ["8765432109"],
+        "suspiciousKeywords": ["congratulations", "won", "claim"]
+      }
+    },
+    {
+      "id": 5,
+      "name": "OTP Request Scam",
+      "description": "Tests detection of OTP/credentials request",
+      "request": {
+        "sessionId": "test-otp-001",
+        "message": {
+          "sender": "scammer",
+          "text": "This is HDFC Bank. An OTP has been sent to your mobile. Please share it to verify your identity and prevent account suspension.",
+          "timestamp": 1770005528731
+        },
+        "conversationHistory": [],
+        "metadata": {
+          "channel": "Call",
+          "language": "English",
+          "locale": "IN"
+        }
+      },
+      "expected_intelligence": {
+        "suspiciousKeywords": ["otp", "verify", "suspended"]
+      }
+    },
+    {
+      "id": 6,
+      "name": "KYC Update Scam",
+      "description": "Tests KYC update phishing scam",
+      "request": {
+        "sessionId": "test-kyc-001",
+        "message": {
+          "sender": "scammer",
+          "text": "Dear customer, your KYC will expire today. Update at http://bank-kyc-update.in or account will be blocked. Provide PAN, Aadhaar, and bank details.",
+          "timestamp": 1770005528731
+        },
+        "conversationHistory": [],
+        "metadata": {
+          "channel": "SMS",
+          "language": "English",
+          "locale": "IN"
+        }
+      },
+      "expected_intelligence": {
+        "phishingLinks": ["http://bank-kyc-update.in"],
+        "suspiciousKeywords": ["expire", "blocked", "update"]
+      }
+    },
+    {
+      "id": 7,
+      "name": "Investment Scam",
+      "description": "Tests detection of fake investment scheme",
+      "request": {
+        "sessionId": "test-investment-001",
+        "message": {
+          "sender": "scammer",
+          "text": "Limited offer! Invest Rs.10,000 today, get Rs.50,000 in 30 days. Transfer to: 998877665544 or UPI: invest@guaranteed.com. Call: +918888777766",
+          "timestamp": 1770005528731
+        },
+        "conversationHistory": [],
+        "metadata": {
+          "channel": "WhatsApp",
+          "language": "English",
+          "locale": "IN"
+        }
+      },
+      "expected_intelligence": {
+        "bankAccounts": ["998877665544"],
+        "upiIds": ["invest@guaranteed.com"],
+        "phoneNumbers": ["+918888777766"],
+        "suspiciousKeywords": ["limited", "guaranteed"]
+      }
+    },
+    {
+      "id": 8,
+      "name": "Fake Delivery Scam",
+      "description": "Tests courier/delivery fee scam",
+      "request": {
+        "sessionId": "test-delivery-001",
+        "message": {
+          "sender": "scammer",
+          "text": "Your package is held. Pay Rs.500 clearance to account: 556677889900. Track: http://fake-courier.com/track?id=ABC123",
+          "timestamp": 1770005528731
+        },
+        "conversationHistory": [],
+        "metadata": {
+          "channel": "Email",
+          "language": "English",
+          "locale": "IN"
+        }
+      },
+      "expected_intelligence": {
+        "bankAccounts": ["556677889900"],
+        "phishingLinks": ["http://fake-courier.com/track?id=ABC123"]
+      }
+    },
+    {
+      "id": 9,
+      "name": "Job Offer Scam",
+      "description": "Tests fake job offer with registration fee",
+      "request": {
+        "sessionId": "test-job-001",
+        "message": {
+          "sender": "scammer",
+          "text": "Selected for Google Engineer position, 25 LPA. Pay Rs.5000 registration to: hr@google-recruitment.co.in or UPI: googlehr@paytm. HR: +917777888899",
+          "timestamp": 1770005528731
+        },
+        "conversationHistory": [],
+        "metadata": {
+          "channel": "Email",
+          "language": "English",
+          "locale": "IN"
+        }
+      },
+      "expected_intelligence": {
+        "upiIds": ["googlehr@paytm"],
+        "phoneNumbers": ["+917777888899"],
+        "suspiciousKeywords": ["registration"]
+      }
+    },
+    {
+      "id": 10,
+      "name": "Tax Refund Scam",
+      "description": "Tests fake tax refund phishing",
+      "request": {
+        "sessionId": "test-tax-001",
+        "message": {
+          "sender": "scammer",
+          "text": "Income Tax: You are eligible for Rs.35,000 refund. Claim: http://incometax-refund.com/claim. Provide bank details, PAN, and Aadhaar.",
+          "timestamp": 1770005528731
+        },
+        "conversationHistory": [],
+        "metadata": {
+          "channel": "SMS",
+          "language": "English",
+          "locale": "IN"
+        }
+      },
+      "expected_intelligence": {
+        "phishingLinks": ["http://incometax-refund.com/claim"],
+        "suspiciousKeywords": ["refund", "claim"]
+      }
+    }
+  ],
+  "multi_turn_examples": [
+    {
+      "name": "3-Turn Bank Fraud Conversation",
+      "description": "Progressive bank fraud conversation with increasing pressure",
+      "turns": [
+        {
+          "turn": 1,
+          "request": {
+            "sessionId": "multi-bank-001",
+            "message": {
+              "sender": "scammer",
+              "text": "Your account will be blocked in 2 hours due to failed KYC verification.",
+              "timestamp": 1770005528000
+            },
+            "conversationHistory": []
+          }
+        },
+        {
+          "turn": 2,
+          "request": {
+            "sessionId": "multi-bank-001",
+            "message": {
+              "sender": "scammer",
+              "text": "To verify, share your account number and registered mobile.",
+              "timestamp": 1770005529000
+            },
+            "conversationHistory": [
+              {
+                "sender": "scammer",
+                "text": "Your account will be blocked in 2 hours due to failed KYC verification.",
+                "timestamp": 1770005528000
+              },
+              {
+                "sender": "user",
+                "text": "Why is my account being blocked? I recently updated my KYC.",
+                "timestamp": 1770005528500
+              }
+            ]
+          }
+        },
+        {
+          "turn": 3,
+          "request": {
+            "sessionId": "multi-bank-001",
+            "message": {
+              "sender": "scammer",
+              "text": "System shows incomplete verification. Share OTP sent to your mobile.",
+              "timestamp": 1770005530000
+            },
+            "conversationHistory": [
+              {
+                "sender": "scammer",
+                "text": "Your account will be blocked in 2 hours due to failed KYC verification.",
+                "timestamp": 1770005528000
+              },
+              {
+                "sender": "user",
+                "text": "Why is my account being blocked? I recently updated my KYC.",
+                "timestamp": 1770005528500
+              },
+              {
+                "sender": "scammer",
+                "text": "To verify, share your account number and registered mobile.",
+                "timestamp": 1770005529000
+              },
+              {
+                "sender": "user",
+                "text": "How do I know this is really from the bank?",
+                "timestamp": 1770005529500
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5-Turn UPI Scam Conversation",
+      "description": "Extended UPI fraud conversation",
+      "turns": [
+        {
+          "turn": 1,
+          "request": {
+            "sessionId": "multi-upi-001",
+            "message": {
+              "sender": "scammer",
+              "text": "Your UPI is temporarily blocked due to security reasons.",
+              "timestamp": 1770005528000
+            },
+            "conversationHistory": []
+          }
+        },
+        {
+          "turn": 2,
+          "request": {
+            "sessionId": "multi-upi-001",
+            "message": {
+              "sender": "scammer",
+              "text": "We need to verify your UPI ID. What is it?",
+              "timestamp": 1770005529000
+            },
+            "conversationHistory": [
+              {
+                "sender": "scammer",
+                "text": "Your UPI is temporarily blocked due to security reasons.",
+                "timestamp": 1770005528000
+              },
+              {
+                "sender": "user",
+                "text": "Why is it blocked? I was using it this morning.",
+                "timestamp": 1770005528500
+              }
+            ]
+          }
+        },
+        {
+          "turn": 3,
+          "request": {
+            "sessionId": "multi-upi-001",
+            "message": {
+              "sender": "scammer",
+              "text": "To unblock, send Re.1 to support@paytm and share transaction ID.",
+              "timestamp": 1770005530000
+            },
+            "conversationHistory": [
+              {
+                "sender": "scammer",
+                "text": "Your UPI is temporarily blocked due to security reasons.",
+                "timestamp": 1770005528000
+              },
+              {
+                "sender": "user",
+                "text": "Why is it blocked? I was using it this morning.",
+                "timestamp": 1770005528500
+              },
+              {
+                "sender": "scammer",
+                "text": "We need to verify your UPI ID. What is it?",
+                "timestamp": 1770005529000
+              },
+              {
+                "sender": "user",
+                "text": "How do I know you are from the bank? This seems suspicious.",
+                "timestamp": 1770005529500
+              }
+            ]
+          }
+        },
+        {
+          "turn": 4,
+          "request": {
+            "sessionId": "multi-upi-001",
+            "message": {
+              "sender": "scammer",
+              "text": "This is official procedure. Account remains blocked if you dont comply. Call: 7654321098",
+              "timestamp": 1770005531000
+            },
+            "conversationHistory": [
+              {
+                "sender": "scammer",
+                "text": "Your UPI is temporarily blocked due to security reasons.",
+                "timestamp": 1770005528000
+              },
+              {
+                "sender": "user",
+                "text": "Why is it blocked? I was using it this morning.",
+                "timestamp": 1770005528500
+              },
+              {
+                "sender": "scammer",
+                "text": "We need to verify your UPI ID. What is it?",
+                "timestamp": 1770005529000
+              },
+              {
+                "sender": "user",
+                "text": "How do I know you are from the bank? This seems suspicious.",
+                "timestamp": 1770005529500
+              },
+              {
+                "sender": "scammer",
+                "text": "To unblock, send Re.1 to support@paytm and share transaction ID.",
+                "timestamp": 1770005530000
+              },
+              {
+                "sender": "user",
+                "text": "Why do I need to send money? Banks never ask for money.",
+                "timestamp": 1770005530500
+              }
+            ]
+          }
+        },
+        {
+          "turn": 5,
+          "request": {
+            "sessionId": "multi-upi-001",
+            "message": {
+              "sender": "scammer",
+              "text": "Its just for verification. Money returned instantly. Do it now or lose access permanently.",
+              "timestamp": 1770005532000
+            },
+            "conversationHistory": [
+              {
+                "sender": "scammer",
+                "text": "Your UPI is temporarily blocked due to security reasons.",
+                "timestamp": 1770005528000
+              },
+              {
+                "sender": "user",
+                "text": "Why is it blocked? I was using it this morning.",
+                "timestamp": 1770005528500
+              },
+              {
+                "sender": "scammer",
+                "text": "We need to verify your UPI ID. What is it?",
+                "timestamp": 1770005529000
+              },
+              {
+                "sender": "user",
+                "text": "How do I know you are from the bank? This seems suspicious.",
+                "timestamp": 1770005529500
+              },
+              {
+                "sender": "scammer",
+                "text": "To unblock, send Re.1 to support@paytm and share transaction ID.",
+                "timestamp": 1770005530000
+              },
+              {
+                "sender": "user",
+                "text": "Why do I need to send money? Banks never ask for money.",
+                "timestamp": 1770005530500
+              },
+              {
+                "sender": "scammer",
+                "text": "This is official procedure. Account remains blocked if you dont comply. Call: 7654321098",
+                "timestamp": 1770005531000
+              },
+              {
+                "sender": "user",
+                "text": "I dont understand this process. Can you explain more?",
+                "timestamp": 1770005531500
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
