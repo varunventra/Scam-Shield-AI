@@ -1,0 +1,46 @@
+services:
+  - type: web
+    name: scambot-honeypot
+    env: python
+    region: oregon
+    plan: free
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o
+      - key: OPENAI_TEMPERATURE
+        value: 0.7
+      - key: MAX_TOKENS
+        value: 1000
+      - key: GUVI_CALLBACK_URL
+        value: https://hackathon.guvi.in/api/updateHoneyPotFinalResult
+      - key: DEBUG
+        value: false
+      - key: LOG_LEVEL
+        value: INFO
+      - key: MAX_CONVERSATION_TURNS
+        value: 20
+      - key: SESSION_TIMEOUT
+        value: 3600
+      - key: SCAM_CONFIDENCE_THRESHOLD
+        value: 0.7
+      - key: AGENT_NAME
+        value: Rahul
+      - key: AGENT_AGE
+        value: 28
+      - key: AGENT_OCCUPATION
+        value: Software Engineer
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        fromService:
+          type: web
+          name: scambot-honeypot
+          property: port

@@ -2,6 +2,14 @@
 
 An enterprise-level AI-powered honeypot system that detects scam messages, autonomously engages scammers in human-like conversations, and extracts actionable intelligence.
 
+## 🚀 Quick Start - Deploy to Production
+
+**Deploy in 10 minutes:** See [QUICKSTART_RENDER.md](QUICKSTART_RENDER.md)
+
+**Full deployment guide:** See [RENDER_DEPLOYMENT_GUIDE.md](RENDER_DEPLOYMENT_GUIDE.md)
+
+**Production summary:** See [PRODUCTION_READY_SUMMARY.md](PRODUCTION_READY_SUMMARY.md)
+
 ## Features
 
 - **Scam Detection**: AI-powered detection of various scam types (bank fraud, UPI fraud, phishing, fake offers)
@@ -9,7 +17,7 @@ An enterprise-level AI-powered honeypot system that detects scam messages, auton
 - **Multi-turn Conversations**: Handles complex conversation flows
 - **Intelligence Extraction**: Extracts bank accounts, UPI IDs, phone numbers, phishing links, and suspicious keywords
 - **API-First Design**: RESTful API with authentication
-- **Enterprise-Ready**: Structured codebase, logging, error handling, Docker support
+- **Production-Ready**: Configured for Render deployment with 24/7 uptime
 
 ## Architecture
 
@@ -31,50 +39,38 @@ scambot-honeypot/
 ## Prerequisites
 
 - Python 3.11+
-- OpenAI API key
-- Docker (optional)
+- OpenAI API key with credits
+- GitHub account (for deployment)
+- Render account (free tier)
+- UptimeRobot account (free tier)
 
-## Quick Start
+## 🎯 Production Deployment
 
-### 1. Clone and Setup
+This application is production-ready and configured for deployment on Render (Free Tier).
 
-```bash
-cd hackathon-scambot
-```
+### Quick Deploy (10 minutes)
+1. Run `.\cleanup_old_files.bat` to remove old files
+2. Push code to GitHub
+3. Follow [QUICKSTART_RENDER.md](QUICKSTART_RENDER.md)
+4. Set up UptimeRobot using [UPTIMEROBOT_SETUP.md](UPTIMEROBOT_SETUP.md)
 
-### 2. Create Environment File
-
-Copy `.env.example` to `.env` and configure:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` with your credentials:
-
-```env
-API_KEY=your_secret_api_key_here
-OPENAI_API_KEY=your_openai_api_key_here
-```
-
-### 3. Run with Docker (Recommended)
-
-```bash
-docker-compose up --build
-```
-
-### 4. Run Locally
+### Local Development
 
 ```bash
 # Create virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+venv\Scripts\activate  # On Windows
+source venv/bin/activate  # On Unix/Mac
 
 # Install dependencies
 pip install -r requirements.txt
 
+# Create .env file
+cp .env.example .env
+# Edit .env with your API keys
+
 # Run the application
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ## API Usage
@@ -229,28 +225,28 @@ Log levels: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
 - Input validation with Pydantic models
 - Secure environment variable handling
 
-## Production Deployment
+## Production Deployment on Render
 
-### Docker Deployment
+This application is configured for zero-config deployment on Render using [render.yaml](render.yaml).
 
-```bash
-# Build and run
-docker-compose up -d
+### Deployment Steps:
+1. Push code to GitHub
+2. Connect repository to Render
+3. Set environment variables in Render dashboard
+4. Deploy automatically
 
-# View logs
-docker-compose logs -f
+See [RENDER_DEPLOYMENT_GUIDE.md](RENDER_DEPLOYMENT_GUIDE.md) for complete instructions.
 
-# Stop
-docker-compose down
-```
+### Required Environment Variables:
+- `API_KEY`: Generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"`
+- `OPENAI_API_KEY`: Your OpenAI API key
 
-### Environment Variables in Production
+### Keeping Service Alive:
+Render Free Tier spins down after 15 minutes. Use UptimeRobot to keep it alive:
+- Monitor URL: `https://your-service.onrender.com/health`
+- Interval: Every 5 minutes
 
-1. Set strong `API_KEY`
-2. Use production OpenAI API key
-3. Set `DEBUG=False`
-4. Configure `LOG_LEVEL=INFO` or `WARNING`
-5. Adjust `MAX_CONVERSATION_TURNS` based on needs
+See [UPTIMEROBOT_SETUP.md](UPTIMEROBOT_SETUP.md) for setup instructions.
 
 ## Monitoring
 
