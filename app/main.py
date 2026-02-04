@@ -58,6 +58,7 @@ async def root():
         "status": "running"
     }
 @app.get("/health", include_in_schema=False)
+@app.head("/health", include_in_schema=False)
 async def health_check():
     """
     Health check endpoint.
