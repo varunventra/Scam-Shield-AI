@@ -57,6 +57,16 @@ async def root():
         "version": "1.0.0",
         "status": "running"
     }
+@app.get("/health", include_in_schema=False)
+async def health_check():
+    """
+    Health check endpoint.
+    Must be publicly accessible without authentication.
+    """
+    return {
+        "status": "healthy",
+        "active_sessions": 0
+    }
 
 
 if __name__ == "__main__":
