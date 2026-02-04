@@ -61,13 +61,13 @@ def main():
         # conf.get_default().auth_token = "YOUR_NGROK_AUTH_TOKEN"
 
         # Create HTTP tunnel
-        public_url = ngrok.connect(settings.port, bind_tls=True)
+        tunnel = ngrok.connect(settings.port, bind_tls=True)
+        public_url = tunnel.public_url
 
         print("\n" + "="*70)
         print("✅ NGROK TUNNEL CREATED SUCCESSFULLY!")
         print("="*70)
         print(f"\n🔗 Public URL: {public_url}")
-        print(f"🔗 Public URL (alternative): {public_url.replace('http://', 'https://')}")
         print(f"\n📍 Local URL: http://localhost:{settings.port}")
         print("\n" + "="*70)
         print("\n📋 HACKATHON SUBMISSION DETAILS:")
