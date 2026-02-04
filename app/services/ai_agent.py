@@ -76,6 +76,8 @@ Remember: You're a real person who is confused and concerned, trying to understa
         """
         Generate a human-like response to the scammer's message.
 
+        FAIL-OPEN BEHAVIOR: Always return a response, even if OpenAI fails.
+
         Args:
             request: Conversation request with message and history
 
@@ -83,12 +85,15 @@ Remember: You're a real person who is confused and concerned, trying to understa
             Agent's response text
         """
         try:
-            logger.info(f"Generating agent response - Session: {request.sessionId}")
+            logger.info(f"💬 Generating AI agent response - Session: {request.sessionId}")
+            logger.debug(f"Using model: {self.model}, temp: {settings.openai_temperature}")
 
             # Build conversation context
             conversation_history = self._build_conversation_history(request)
+            logger.debug(f"Conversation history length: {len(conversation_history)} messages")
 
-            # Call OpenAI API
+            # Call OpenAI API (synchronous call in async function is fine)
+            logger.debug(f"🔄 Calling OpenAI API...")
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -105,16 +110,38 @@ Remember: You're a real person who is confused and concerned, trying to understa
             reply = response.choices[0].message.content.strip()
 
             logger.info(
-                f"Generated response - Session: {request.sessionId}, "
-                f"Length: {len(reply)} chars"
+                f"✅ Generated AI response - Session: {request.sessionId}, "
+                f"Length: {len(reply)} chars, Model: {self.model}"
             )
+            logger.debug(f"Response preview: {reply[:100]}...")
 
             return reply
 
         except Exception as e:
-            logger.error(f"Error generating agent response: {str(e)}")
-            # Fallback response
-            return "I'm not sure I understand. Can you explain more?"
+            error_type = type(e).__name__
+            error_msg = str(e)
+
+            logger.error(
+                f"❌ OPENAI API ERROR in generate_response - Session: {request.sessionId}, "
+                f"Type: {error_type}, Message: {error_msg}"
+            )
+
+            # FAIL-OPEN: Return contextual fallback based on error type
+            if "rate_limit" in error_msg.lower():
+                logger.warning("⚠️ Rate limit error - using fallback response")
+                return "I need to think about this. Can you tell me more about why this is urgent?"
+
+            elif "authentication" in error_msg.lower() or "api_key" in error_msg.lower():
+                logger.critical("🚨 AUTHENTICATION ERROR - Check OpenAI API key!")
+                return "I'm having trouble right now. Could you explain the situation again?"
+
+            elif "model" in error_msg.lower() or "not found" in error_msg.lower():
+                logger.critical(f"🚨 MODEL ERROR - Model '{self.model}' may not be accessible!")
+                return "This sounds concerning. Can you provide more details?"
+
+            else:
+                logger.error(f"⚠️ Unknown OpenAI error: {error_type}")
+                return "I'm confused about what you're saying. Can you explain it differently?"
 
     def _count_messages(self, request: ConversationRequest) -> int:
         """Count total messages in conversation including current one."""

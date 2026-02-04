@@ -1,6 +1,8 @@
 """
-Scam detection service using OpenAI API.
+Scam detection service using OpenAI API with rule-based fallback.
 """
+import json
+import re
 from typing import Tuple
 from openai import OpenAI
 from app.core.config import settings
@@ -9,16 +11,77 @@ from app.models.requests import ConversationRequest
 
 
 class ScamDetector:
-    """Detects scam intent in messages using AI."""
+    """Detects scam intent in messages using AI with rule-based fallback."""
+
+    # Scam keywords for rule-based detection
+    SCAM_KEYWORDS = [
+        # Urgency
+        "urgent", "immediately", "now", "today", "suspended", "blocked", "expire",
+        # Verification/Authentication
+        "verify", "confirm", "authenticate", "validate", "update", "kYC", "kyc",
+        # Account/Banking
+        "account", "bank", "upi", "paytm", "phonepe", "gpay", "debit", "credit",
+        # Threats
+        "legal action", "police", "arrest", "fine", "penalty", "court",
+        # Requests for sensitive info
+        "otp", "pin", "password", "cvv", "card", "aadhaar", "aadhar", "pan",
+        # Common scam phrases
+        "won", "lottery", "prize", "reward", "refund", "cashback",
+        "click here", "link", "http", "https", "bit.ly",
+        # Impersonation
+        "customer care", "customer support", "helpline", "helpdesk",
+    ]
 
     def __init__(self):
         """Initialize the scam detector with OpenAI client."""
         self.client = OpenAI(api_key=settings.openai_api_key)
         self.model = settings.openai_model
+        logger.info(f"ScamDetector initialized with model: {self.model}")
+
+    def _rule_based_detection(self, message_text: str) -> Tuple[bool, float, str]:
+        """
+        Fallback rule-based scam detection.
+
+        Returns:
+            Tuple of (is_scam, confidence, reasoning)
+        """
+        message_lower = message_text.lower()
+
+        # Count keyword matches
+        matches = []
+        for keyword in self.SCAM_KEYWORDS:
+            if keyword.lower() in message_lower:
+                matches.append(keyword)
+
+        # Calculate confidence based on matches
+        match_count = len(matches)
+
+        if match_count >= 3:
+            confidence = 0.9
+            is_scam = True
+            reasoning = f"Rule-based: High match ({match_count} keywords: {', '.join(matches[:5])})"
+        elif match_count >= 2:
+            confidence = 0.75
+            is_scam = True
+            reasoning = f"Rule-based: Medium match ({match_count} keywords: {', '.join(matches)})"
+        elif match_count >= 1:
+            confidence = 0.6
+            is_scam = True
+            reasoning = f"Rule-based: Low match ({match_count} keyword: {matches[0]})"
+        else:
+            confidence = 0.3
+            is_scam = False
+            reasoning = "Rule-based: No scam keywords detected"
+
+        logger.info(f"Rule-based detection: is_scam={is_scam}, confidence={confidence:.2f}, matches={match_count}")
+        return is_scam, confidence, reasoning
 
     async def detect_scam(self, request: ConversationRequest) -> Tuple[bool, float, str]:
         """
         Analyze message for scam intent.
+
+        FAIL-OPEN BEHAVIOR: If OpenAI fails, use rule-based detection.
+        If both fail, assume it's suspicious and engage anyway.
 
         Args:
             request: Conversation request containing message and history
@@ -33,7 +96,8 @@ class ScamDetector:
             # Create prompt for scam detection
             prompt = self._create_detection_prompt(context, request.message.text)
 
-            logger.info(f"Analyzing message for scam intent - Session: {request.sessionId}")
+            logger.info(f"🔍 Analyzing message for scam intent - Session: {request.sessionId}")
+            logger.debug(f"Message text: {request.message.text[:100]}...")
 
             # Call OpenAI API
             response = self.client.chat.completions.create(
@@ -52,10 +116,12 @@ class ScamDetector:
 
 Respond in JSON format with:
 {
-    "is_scam": true/false,
-    "confidence": 0.0-1.0,
+    "is_scam": true,
+    "confidence": 0.9,
     "reasoning": "brief explanation"
-}"""
+}
+
+Use true/false (lowercase) for boolean values."""
                     },
                     {
                         "role": "user",
@@ -67,23 +133,49 @@ Respond in JSON format with:
                 response_format={"type": "json_object"}
             )
 
-            # Parse response
-            result = eval(response.choices[0].message.content)
+            # Parse response safely with json.loads (NOT eval!)
+            content = response.choices[0].message.content
+            logger.debug(f"OpenAI raw response: {content}")
+
+            result = json.loads(content)
+
+            # Handle both Python True/False and JSON true/false
             is_scam = result.get("is_scam", False)
-            confidence = result.get("confidence", 0.0)
+            if isinstance(is_scam, str):
+                is_scam = is_scam.lower() in ['true', '1', 'yes']
+
+            confidence = float(result.get("confidence", 0.0))
             reasoning = result.get("reasoning", "No reasoning provided")
 
             logger.info(
-                f"Scam detection result - Session: {request.sessionId}, "
-                f"Scam: {is_scam}, Confidence: {confidence:.2f}"
+                f"✅ OpenAI detection - Session: {request.sessionId}, "
+                f"Scam: {is_scam}, Confidence: {confidence:.2f}, Reason: {reasoning}"
             )
 
             return is_scam, confidence, reasoning
 
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ JSON parsing error: {str(e)}, content: {content if 'content' in locals() else 'N/A'}")
+            # FAIL-OPEN: Use rule-based detection
+            logger.warning("⚠️ Falling back to rule-based detection due to JSON error")
+            return self._rule_based_detection(request.message.text)
+
         except Exception as e:
-            logger.error(f"Error in scam detection: {str(e)}")
-            # Default to non-scam in case of error to avoid false positives
-            return False, 0.0, f"Error: {str(e)}"
+            error_type = type(e).__name__
+            error_msg = str(e)
+            logger.error(
+                f"❌ OPENAI API ERROR - Session: {request.sessionId}, "
+                f"Type: {error_type}, Message: {error_msg}"
+            )
+
+            # FAIL-OPEN: Use rule-based detection as fallback
+            logger.warning("⚠️ Falling back to rule-based detection due to OpenAI error")
+            is_scam, confidence, reasoning = self._rule_based_detection(request.message.text)
+
+            # Add error context to reasoning
+            reasoning = f"{reasoning} (OpenAI failed: {error_type})"
+
+            return is_scam, confidence, reasoning
 
     def _build_context(self, request: ConversationRequest) -> str:
         """Build conversation context from history."""
@@ -109,25 +201,37 @@ Analyze if this message is a scam attempt. Consider the full conversation contex
         """
         Determine if the AI agent should be activated.
 
+        FAIL-OPEN BEHAVIOR: If in doubt, engage! This is a honeypot.
+
         Args:
             request: Conversation request
 
         Returns:
-            True if agent should be activated (scam detected with sufficient confidence)
+            True if agent should be activated
         """
         is_scam, confidence, reasoning = await self.detect_scam(request)
 
-        should_activate = is_scam and confidence >= settings.scam_confidence_threshold
+        # AGGRESSIVE HONEYPOT: Lower threshold for engagement
+        # Engage if ANY of these conditions are met:
+        # 1. High confidence scam
+        # 2. Medium-low confidence but detected as scam
+        # 3. ANY suspicious keywords (even if low confidence)
+
+        should_activate = (
+            is_scam and confidence >= settings.scam_confidence_threshold
+        ) or (
+            is_scam and confidence >= 0.5  # Lower threshold for honeypot
+        )
 
         if should_activate:
             logger.info(
-                f"Activating agent for session {request.sessionId} - "
-                f"Confidence: {confidence:.2f}, Reason: {reasoning}"
+                f"🚀 ACTIVATING AGENT - Session: {request.sessionId}, "
+                f"Scam: {is_scam}, Confidence: {confidence:.2f}, Reason: {reasoning}"
             )
         else:
             logger.info(
-                f"Not activating agent for session {request.sessionId} - "
-                f"Scam: {is_scam}, Confidence: {confidence:.2f}"
+                f"⏸️ Not activating agent - Session: {request.sessionId}, "
+                f"Scam: {is_scam}, Confidence: {confidence:.2f}, Reason: {reasoning}"
             )
 
         return should_activate

@@ -15,15 +15,27 @@ async def lifespan(app: FastAPI):
     Application lifespan manager.
     Handles startup and shutdown events.
     """
-    # Startup
-    logger.info("Starting Scambot Honeypot API")
+    # Startup - Validate configuration
+    from app.core.config import validate_configuration
+
+    logger.info("="*70)
+    logger.info("🚀 Starting Scambot Honeypot API")
+    logger.info("="*70)
+
+    # Validate configuration (will exit if critical errors)
+    validate_configuration()
+
     logger.info(f"Debug mode: {settings.debug}")
     logger.info(f"OpenAI model: {settings.openai_model}")
+    logger.info("🎯 Honeypot is LIVE and ready to engage!")
+    logger.info("="*70)
 
     yield
 
     # Shutdown
-    logger.info("Shutting down Scambot Honeypot API")
+    logger.info("="*70)
+    logger.info("👋 Shutting down Scambot Honeypot API")
+    logger.info("="*70)
 
 
 # Create FastAPI application

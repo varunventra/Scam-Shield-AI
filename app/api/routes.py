@@ -65,33 +65,62 @@ async def handle_conversation(
         # Check if agent is already activated for this session
         if not session.agent_activated:
             # First message or agent not yet activated - check for scam
-            should_activate = await scam_detector.should_activate_agent(request)
+            logger.info(f"🔎 First message - checking for scam - Session: {request.sessionId}")
 
-            if should_activate:
-                # Detect scam with full analysis
-                is_scam, confidence, reasoning = await scam_detector.detect_scam(request)
+            try:
+                should_activate = await scam_detector.should_activate_agent(request)
 
-                # Update session
+                if should_activate:
+                    # Detect scam with full analysis
+                    is_scam, confidence, reasoning = await scam_detector.detect_scam(request)
+
+                    # Update session
+                    session_manager.update_session(
+                        request.sessionId,
+                        scam_detected=is_scam,
+                        scam_confidence=confidence,
+                        agent_activated=True
+                    )
+
+                    logger.info(
+                        f"✅ Agent activated - Session: {request.sessionId}, "
+                        f"Scam: {is_scam}, Confidence: {confidence:.2f}"
+                    )
+                else:
+                    # HONEYPOT FAIL-OPEN BEHAVIOR:
+                    # Even if detection says "no scam", still engage!
+                    # This is a HONEYPOT - better to over-engage than miss a scam
+                    logger.info(
+                        f"⚠️ Low confidence - but STILL ENGAGING (honeypot mode) - Session: {request.sessionId}"
+                    )
+
+                    # Mark as activated anyway for continued engagement
+                    session_manager.update_session(
+                        request.sessionId,
+                        scam_detected=False,
+                        scam_confidence=0.3,
+                        agent_activated=True  # STILL ACTIVATE - FAIL OPEN!
+                    )
+
+            except Exception as e:
+                # CRITICAL FAIL-OPEN BEHAVIOR:
+                # If scam detection completely fails, STILL ENGAGE!
+                logger.error(
+                    f"🚨 Scam detection FAILED - Session: {request.sessionId}, "
+                    f"Error type: {type(e).__name__}, Message: {str(e)}"
+                )
+                logger.warning(f"⚠️ FAIL-OPEN: Engaging anyway (honeypot behavior)")
+
+                # Activate agent despite error
                 session_manager.update_session(
                     request.sessionId,
-                    scam_detected=is_scam,
-                    scam_confidence=confidence,
+                    scam_detected=True,  # Assume suspicious
+                    scam_confidence=0.5,
                     agent_activated=True
                 )
 
-                logger.info(
-                    f"Agent activated - Session: {request.sessionId}, "
-                    f"Confidence: {confidence:.2f}"
-                )
-            else:
-                # Not a scam or confidence too low
-                logger.info(f"No scam detected - Session: {request.sessionId}")
-                return ConversationResponse(
-                    status="success",
-                    reply="I'm sorry, I didn't understand that."
-                )
-
-        # Agent is activated - generate response
+        # Agent is ALWAYS activated at this point - generate response
+        logger.info(f"💬 Generating agent response - Session: {request.sessionId}")
         agent_response = await ai_agent.generate_response(request)
 
         # Add agent's response to session history
