@@ -22,7 +22,7 @@ This will:
 
 ---
 
-## 📋 What Gets Tested (27 Tests Total)
+## 📋 What Gets Tested (28 Tests Total)
 
 ### 1. Authentication Tests (4 tests)
 - ✅ Health check without auth
@@ -74,7 +74,10 @@ This will:
 - ✅ Phase 2: Agent gradually extracts info (messages 4-6)
 - ✅ Phase 3: Agent comfortable extraction (messages 7+)
 
-### 13. Multi-Turn Intelligence (1 test)
+### 13. Conversation History Maintenance (1 test) **CRITICAL**
+- ✅ History maintained without client sending conversationHistory (GUVI bug fix)
+
+### 14. Multi-Turn Intelligence (1 test)
 - ✅ Intelligence accumulation across conversation turns
 
 ---

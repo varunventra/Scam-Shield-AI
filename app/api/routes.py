@@ -121,7 +121,16 @@ async def handle_conversation(
 
         # Agent is ALWAYS activated at this point - generate response
         logger.info(f"💬 Generating agent response - Session: {request.sessionId}")
-        agent_response = await ai_agent.generate_response(request)
+
+        # Use session messages for conversation history (not request history)
+        # This ensures context is maintained even if client doesn't send history
+        session_messages = session.messages
+        logger.info(
+            f"📚 Session has {len(session_messages)} messages stored - "
+            f"Session: {request.sessionId}"
+        )
+
+        agent_response = await ai_agent.generate_response(request, session_messages)
 
         # Add agent's response to session history
         from app.models.requests import Message

@@ -199,27 +199,52 @@ YOU: "Ok noted. Nine eight seven... let me write properly. This is your personal
 
 🎭 Remember: You're a PERFECT VICTIM who wants to comply but is confused. The scammer should feel like they're winning. Extract info naturally through "helpful" questions, not aggressive demands. They should NEVER suspect you're gathering their information - they should think you're just a confused old lady trying to follow their instructions!"""
 
-    def _build_conversation_history(self, request: ConversationRequest) -> List[dict]:
-        """Build conversation history for the API call."""
+    def _build_conversation_history(
+        self,
+        request: ConversationRequest,
+        session_messages: List = None
+    ) -> List[dict]:
+        """
+        Build conversation history for the API call.
+
+        Uses session_messages if provided (from internal storage),
+        otherwise falls back to request.conversationHistory (from client).
+
+        This ensures we maintain context even if the client doesn't send history.
+        """
         messages = []
 
-        # Add conversation history
-        for msg in request.conversationHistory:
-            role = "assistant" if msg.sender == "user" else "user"
-            messages.append({
-                "role": role,
-                "content": msg.text
-            })
+        if session_messages is not None:
+            # Use session messages (already includes current message)
+            # Session messages are stored in chronological order
+            for msg in session_messages:
+                role = "assistant" if msg.sender == "user" else "user"
+                messages.append({
+                    "role": role,
+                    "content": msg.text
+                })
+        else:
+            # Fallback to request history + current message
+            for msg in request.conversationHistory:
+                role = "assistant" if msg.sender == "user" else "user"
+                messages.append({
+                    "role": role,
+                    "content": msg.text
+                })
 
-        # Add current message
-        messages.append({
-            "role": "user",
-            "content": request.message.text
-        })
+            # Add current message
+            messages.append({
+                "role": "user",
+                "content": request.message.text
+            })
 
         return messages
 
-    async def generate_response(self, request: ConversationRequest) -> str:
+    async def generate_response(
+        self,
+        request: ConversationRequest,
+        session_messages: List = None
+    ) -> str:
         """
         Generate a human-like response to the scammer's message.
 
@@ -227,6 +252,7 @@ YOU: "Ok noted. Nine eight seven... let me write properly. This is your personal
 
         Args:
             request: Conversation request with message and history
+            session_messages: Optional list of messages from session storage
 
         Returns:
             Agent's response text
@@ -235,9 +261,15 @@ YOU: "Ok noted. Nine eight seven... let me write properly. This is your personal
             logger.info(f"💬 Generating AI agent response - Session: {request.sessionId}")
             logger.debug(f"Using model: {self.model}, temp: {settings.openai_temperature}")
 
-            # Build conversation context
-            conversation_history = self._build_conversation_history(request)
-            logger.debug(f"Conversation history length: {len(conversation_history)} messages")
+            # Build conversation context from session messages (if provided) or request history
+            conversation_history = self._build_conversation_history(request, session_messages)
+
+            history_source = "session storage" if session_messages is not None else "request history"
+            logger.info(
+                f"📜 Building conversation from {history_source} - "
+                f"Session: {request.sessionId}, "
+                f"Messages: {len(conversation_history)}"
+            )
 
             # Call OpenAI API (synchronous call in async function is fine)
             logger.debug(f"🔄 Calling OpenAI API...")
