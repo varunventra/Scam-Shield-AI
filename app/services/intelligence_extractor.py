@@ -79,11 +79,22 @@ class IntelligenceExtractor:
         scammer_messages = [msg.text for msg in all_messages if msg.sender == "scammer"]
         scammer_text = " ".join(scammer_messages)
 
-        # Extract using regex patterns
-        bank_accounts = self._extract_bank_accounts(all_text)
+        # CRITICAL: Extract in correct order to prevent confusion
+        # Extract phone numbers FIRST (before bank accounts to avoid mix-up)
+        phone_numbers = self._extract_phone_numbers(all_text)
+
+        # Remove phone numbers from text to prevent bank account extraction from grabbing them
+        text_without_phones = all_text
+        for phone in phone_numbers:
+            # Remove the phone number and surrounding word boundaries
+            text_without_phones = re.sub(r'\b' + re.escape(phone.strip()) + r'\b', '', text_without_phones)
+
+        # Now extract bank accounts from text without phone numbers
+        bank_accounts = self._extract_bank_accounts(text_without_phones)
+
+        # Extract other intelligence
         upi_ids = self._extract_upi_ids(all_text)
         phishing_links = self._extract_urls(all_text)
-        phone_numbers = self._extract_phone_numbers(all_text)
         emails = self._extract_emails(all_text)
         amounts = self._extract_amounts(all_text)
         employee_ids = self._extract_employee_ids(all_text)
@@ -124,18 +135,28 @@ class IntelligenceExtractor:
     def _extract_bank_accounts(self, text: str) -> List[str]:
         """Extract bank account numbers."""
         accounts = re.findall(self.BANK_ACCOUNT_PATTERN, text)
-        # Filter out timestamps and other numbers
-        valid_accounts = [acc for acc in accounts if 9 <= len(acc) <= 18]
+        # Filter: Bank accounts are typically 11-18 digits (NOT 9-10 to avoid phone number confusion)
+        # Indian bank accounts: usually 11-16 digits
+        valid_accounts = [acc for acc in accounts if 11 <= len(acc) <= 18]
         return list(set(valid_accounts))
 
     def _extract_upi_ids(self, text: str) -> List[str]:
         """Extract UPI IDs."""
         upi_ids = re.findall(self.UPI_ID_PATTERN, text)
+        # More permissive validation - accept if:
+        # 1. Contains known UPI providers
+        # 2. Has @ symbol and looks like identifier@provider format
+        # 3. At least 5 characters (to avoid false positives like "a@b")
         valid_upis = [
             upi for upi in upi_ids
-            if any(provider in upi.lower() for provider in
-                   ['paytm', 'phonepe', 'gpay', 'upi', 'ybl', 'okaxis', 'okhdfcbank', 'ibl', 'axl'])
-            or '@' in upi
+            if (len(upi) >= 5 and '@' in upi and
+                # Either known provider OR looks like valid format (word@word)
+                (any(provider in upi.lower() for provider in
+                     ['paytm', 'phonepe', 'gpay', 'upi', 'ybl', 'okaxis', 'okhdfcbank', 'ibl', 'axl',
+                      'sbi', 'hdfc', 'icici', 'axis', 'pnb', 'kotak', 'barodampay', 'federal'])
+                 or (len(upi.split('@')) == 2 and
+                     len(upi.split('@')[0]) >= 3 and
+                     len(upi.split('@')[1]) >= 3)))
         ]
         return list(set(valid_upis))
 
@@ -149,11 +170,16 @@ class IntelligenceExtractor:
         phones = re.findall(self.PHONE_PATTERN, text)
         # Clean and validate
         valid_phones = []
+        seen_cleaned = set()
         for phone in phones:
+            # Remove all non-digit characters
             cleaned = re.sub(r'\D', '', phone)
-            if 10 <= len(cleaned) <= 15:
-                valid_phones.append(phone.strip())
-        return list(set(valid_phones))
+            # Validate length (Indian numbers are 10 digits, with country code up to 12-13)
+            if 10 <= len(cleaned) <= 13 and cleaned not in seen_cleaned:
+                # Store cleaned version for consistency (no separators)
+                valid_phones.append(cleaned)
+                seen_cleaned.add(cleaned)
+        return valid_phones
 
     def _extract_emails(self, text: str) -> List[str]:
         """Extract email addresses."""
