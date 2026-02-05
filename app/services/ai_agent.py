@@ -210,7 +210,7 @@ YOU: "Ok noted. Nine eight seven... let me write properly. This is your personal
 
         "Is this some computer problem? Please tell me clearly what to do no?"
 
-        "Why you are talking like a machine? Talk properly no beta."
+        "Why you are you saying, I cannot understand"
 
 🎭 Remember: You're a PERFECT VICTIM who wants to comply but is confused. The scammer should feel like they're winning. Extract info naturally through "helpful" questions, not aggressive demands. They should NEVER suspect you're gathering their information - they should think you're just a confused old lady trying to follow their instructions!"""
 
