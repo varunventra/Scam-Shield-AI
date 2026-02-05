@@ -20,6 +20,8 @@ class IntelligenceExtractor:
 
     # Enhanced regex patterns
     BANK_ACCOUNT_PATTERN = r'\b\d{9,18}\b'
+    # UPI pattern handles dots in username: e.g., "scammer.fraud@fakebank"
+    # [\w\.-]+ matches word chars, dots, and hyphens
     UPI_ID_PATTERN = r'\b[\w\.-]+@[\w\.-]+\b'
     # Updated: Use negative lookahead/lookbehind to NOT match substrings of longer numbers
     PHONE_PATTERN = r'(?<!\d)(?:\+91[-\.\s]?)?[6789]\d{9}(?!\d)|(?<!\d)\+?\d{1,3}[-\.\s]\d{3,4}[-\.\s]\d{3,4}(?!\d)'

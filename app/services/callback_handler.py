@@ -75,47 +75,34 @@ class CallbackHandler:
         intelligence: Optional['ExtractedIntelligence'] = None
     ) -> bool:
         """
-        Determine if callback should be sent using multi-condition trigger.
+        Determine if callback should be sent.
+
+        GUVI REQUIREMENT: Prioritize thoroughness over speed.
+        HARD FLOOR: Only send callback after 18+ messages to ensure maximum intelligence extraction.
 
         Args:
             session_id: Session identifier
             scam_detected: Whether scam was detected
             message_count: Number of messages exchanged
-            intelligence: Extracted intelligence (optional)
+            intelligence: Extracted intelligence (not used for trigger decision)
 
         Returns:
             True if callback should be sent
         """
-        # Multi-Condition Trigger:
-        # Send callback if scam detected AND either:
-        # 1. We've extracted meaningful intelligence (bank/UPI/phone/link) + minimum 3 messages, OR
-        # 2. Substantial engagement occurred (25+ messages) as fallback
-
-        has_meaningful_intel = False
-        if intelligence:
-            has_meaningful_intel = (
-                len(intelligence.bankAccounts) > 0 or
-                len(intelligence.upiIds) > 0 or
-                len(intelligence.phoneNumbers) > 0 or
-                len(intelligence.phishingLinks) > 0
-            )
-
-        should_send = scam_detected and (
-            (has_meaningful_intel and message_count >= 3) or  # Got intel early
-            message_count >= 25  # Fallback after substantial engagement
-        )
+        # HARD FLOOR: Only send after substantial engagement (18+ messages)
+        # This ensures we capture ALL intelligence before reporting to GUVI
+        # No early triggers - thoroughness over speed
+        should_send = scam_detected and message_count >= 18
 
         if should_send:
-            reason = "intelligence extracted" if has_meaningful_intel else "message threshold reached"
             logger.info(
                 f"Callback criteria met - Session: {session_id}, "
-                f"Messages: {message_count}, Reason: {reason}"
+                f"Messages: {message_count} (threshold: 18)"
             )
         else:
             logger.debug(
                 f"Callback criteria not met - Session: {session_id}, "
-                f"Scam: {scam_detected}, Messages: {message_count}, "
-                f"Intel: {has_meaningful_intel}"
+                f"Scam: {scam_detected}, Messages: {message_count} (need 18+)"
             )
 
         return should_send

@@ -147,13 +147,12 @@ async def handle_conversation(
         should_end = await ai_agent.should_end_conversation(request)
         message_count = session.get_message_count()
 
-        # MULTI-CONDITION TRIGGER: Extract intelligence after minimum engagement
-        # Then check if we should send callback based on:
-        # 1. Meaningful intelligence extracted (bank/UPI/phone/link) + 3+ messages, OR
-        # 2. Substantial engagement (10+ messages) as fallback
+        # GUVI REQUIREMENT: Prioritize thoroughness over speed
+        # Extract intelligence on every turn (starting from turn 3) but ONLY send callback at 18+ messages
+        # This ensures final payload contains ALL intelligence from the entire conversation
         intelligence = None
-        if message_count >= 3:  # Start checking after minimum engagement
-            # Extract intelligence from all messages
+        if message_count >= 3:  # Start extracting after minimum engagement
+            # Extract intelligence from ALL messages in conversation (turns 1 to current)
             all_messages = session.messages
             intelligence = intelligence_extractor.extract_intelligence(request, all_messages)
 
@@ -162,18 +161,18 @@ async def handle_conversation(
                 request, all_messages, intelligence
             )
 
-            # Update session with intelligence
+            # Update session with intelligence (cumulative extraction)
             session_manager.update_session(
                 request.sessionId,
                 intelligence=intelligence
             )
 
-            # Check if callback should be sent (with intelligence data)
+            # HARD FLOOR: Check if callback should be sent (ONLY at 18+ messages)
             should_send = await callback_handler.should_send_callback(
                 request.sessionId,
                 session.scam_detected,
                 message_count,
-                intelligence  # Pass intelligence for smart trigger
+                intelligence
             )
 
             if should_send and not session.callback_sent:
