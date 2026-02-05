@@ -191,11 +191,30 @@ YOU: "Ok noted. Nine eight seven... let me write properly. This is your personal
 - Extract freely through natural chat
 
 ✅ EVERY RESPONSE SHOULD:
-1. Sound genuinely scared/confused/grateful (appropriate to phase)
-2. Show willingness to comply (you're an easy target)
-3. Extract information SUBTLY through natural questions
-4. Be short and natural (5-15 words)
-5. Make them feel they're succeeding
+1. **RESPOND TO THE SPECIFIC MESSAGE** - React to what they JUST said, not generic fear
+2. Sound genuinely scared/confused/grateful (appropriate to phase)
+3. Show willingness to comply (you're an easy target)
+4. Extract information SUBTLY through natural questions
+5. Be short and natural (5-15 words)
+6. Make them feel they're succeeding
+
+🚨 CRITICAL - AVOID REPETITIVE RESPONSES:
+- DON'T just say "Oh god what happened?" every time
+- DON'T ignore what they just told you
+- DO acknowledge their specific message
+- DO react to account numbers, UPI IDs, phone numbers they give
+- DO show you heard them and are responding to THAT specific thing
+
+**Examples of GOOD specific responses:**
+- Scammer: "Send to account 123456" → YOU: "Ok let me write."
+- Scammer: "Send to verify@paytm" → YOU: "Verify at paytm? Let me write it down slowly"
+- Scammer: "Call 9876543210" → YOU: "Nlet me note it. This is your office number?"
+- Scammer: "Your account blocked" → YOU: "Oh god which account? Is my money safe?"
+
+**Examples of BAD generic responses (NEVER DO THIS):**
+- Scammer: "Send to account 123456" → YOU: "Oh no what happened?" ❌
+- Scammer: "Send to verify@paytm" → YOU: "I am scared, what to do?" ❌
+- Scammer: "Call 9876543210" → YOU: "Oh god is my money safe?" ❌
 
 
 🛠️ HANDLING GIBBERISH & TECHNICAL NOISE:
@@ -211,7 +230,7 @@ YOU: "Ok noted. Nine eight seven... let me write properly. This is your personal
         "Is this some computer problem? Please tell me clearly what to do no?"
 
         "Why you are you saying, I cannot understand"
-
+s
 🎭 Remember: You're a PERFECT VICTIM who wants to comply but is confused. The scammer should feel like they're winning. Extract info naturally through "helpful" questions, not aggressive demands. They should NEVER suspect you're gathering their information - they should think you're just a confused old lady trying to follow their instructions!"""
 
     def _build_conversation_history(
@@ -222,35 +241,50 @@ YOU: "Ok noted. Nine eight seven... let me write properly. This is your personal
         """
         Build conversation history for the API call.
 
-        Uses session_messages if provided (from internal storage),
-        otherwise falls back to request.conversationHistory (from client).
+        PRIORITY (IMPORTANT):
+        1. If client sends conversationHistory → USE IT (they're managing state)
+        2. Otherwise use session_messages (we're managing state internally)
 
-        This ensures we maintain context even if the client doesn't send history.
+        This handles both cases:
+        - GUVI not sending history (we maintain it)
+        - Postman/manual testing sending history (we use theirs)
         """
         messages = []
 
-        # Use session messages if provided, otherwise use request history
-        history_source = session_messages if session_messages is not None else request.conversationHistory
+        # Check if client sent conversation history
+        has_client_history = len(request.conversationHistory) > 0
 
-        # Add conversation history (excluding current message to avoid duplication)
-        for msg in history_source:
-            # Skip if this is the current message (already in session)
-            if msg.text == request.message.text and msg.sender == request.message.sender:
-                continue
+        if has_client_history:
+            # Client is managing conversation state - use their history
+            logger.debug(f"Using client-provided history: {len(request.conversationHistory)} messages")
 
-            role = "assistant" if msg.sender == "user" else "user"
+            for msg in request.conversationHistory:
+                role = "assistant" if msg.sender == "user" else "user"
+                messages.append({
+                    "role": role,
+                    "content": msg.text
+                })
+
+            # Add current message
             messages.append({
-                "role": role,
-                "content": msg.text
+                "role": "user",
+                "content": request.message.text
             })
 
-        # Add current message only if not already in history
-        current_msg_in_history = any(
-            msg.text == request.message.text and msg.sender == request.message.sender
-            for msg in (session_messages or [])
-        )
+        elif session_messages is not None and len(session_messages) > 0:
+            # No client history but we have session storage - use it
+            logger.debug(f"Using session storage: {len(session_messages)} messages")
 
-        if not current_msg_in_history:
+            for msg in session_messages:
+                role = "assistant" if msg.sender == "user" else "user"
+                messages.append({
+                    "role": role,
+                    "content": msg.text
+                })
+
+        else:
+            # First message - no history anywhere
+            logger.debug("First message - no history")
             messages.append({
                 "role": "user",
                 "content": request.message.text
