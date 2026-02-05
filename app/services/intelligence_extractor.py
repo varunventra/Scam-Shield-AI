@@ -21,7 +21,8 @@ class IntelligenceExtractor:
     # Enhanced regex patterns
     BANK_ACCOUNT_PATTERN = r'\b\d{9,18}\b'
     UPI_ID_PATTERN = r'\b[\w\.-]+@[\w\.-]+\b'
-    PHONE_PATTERN = r'[\+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{1,4}[-\s\.]?[0-9]{1,9}'
+    # Updated to handle both formatted and unformatted Indian phone numbers
+    PHONE_PATTERN = r'(?:\+91[-\.\s]?)?[6789]\d{9}\b|(?:\+\d{1,3}[-\.\s]?)?(?:\(?\d{3,4}\)?[-\.\s]?)?\d{3,4}[-\.\s]?\d{3,4}'
     URL_PATTERN = r'https?://[^\s]+'
     EMAIL_PATTERN = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
 
