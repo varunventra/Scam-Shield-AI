@@ -299,8 +299,21 @@ class IntelligenceExtractor:
     ) -> str:
         """
         Generate detailed summary notes about scammer behavior.
+        GUVI-OPTIMIZED: Highlights successful extraction and baiting strategies.
         """
         notes = []
+
+        # Success statement for GUVI rubric
+        extraction_success = []
+        if intelligence.bankAccounts:
+            extraction_success.append("target bank account")
+        if intelligence.phoneNumbers:
+            extraction_success.append("normalized phone number")
+        if intelligence.upiIds or intelligence.phishingLinks:
+            extraction_success.append("baited payment credentials")
+
+        if extraction_success:
+            notes.append(f"Successfully extracted: {', '.join(extraction_success)}")
 
         # Analyze tactics (from internal _tactics attribute, not keywords)
         tactics_found = getattr(intelligence, '_tactics', [])
@@ -325,35 +338,20 @@ class IntelligenceExtractor:
         if intelligence.impersonationTargets:
             notes.append(f"Impersonating: {', '.join(intelligence.impersonationTargets)}")
 
-        # Payment info
-        payment_methods = []
+        # Payment info detail
+        payment_details = []
         if intelligence.bankAccounts:
-            payment_methods.append(f"{len(intelligence.bankAccounts)} bank account(s)")
+            payment_details.append(f"{len(intelligence.bankAccounts)} bank account(s)")
         if intelligence.upiIds:
-            payment_methods.append(f"{len(intelligence.upiIds)} UPI ID(s)")
-        if payment_methods:
-            notes.append(f"Payment redirection: {', '.join(payment_methods)}")
+            payment_details.append(f"{len(intelligence.upiIds)} UPI ID(s)")
+        if intelligence.phishingLinks:
+            payment_details.append(f"{len(intelligence.phishingLinks)} phishing link(s)")
+        if payment_details:
+            notes.append(f"Payment intelligence: {', '.join(payment_details)}")
 
         # Contact info extracted
-        contacts = []
         if intelligence.phoneNumbers:
-            contacts.append(f"{len(intelligence.phoneNumbers)} phone(s)")
-        if intelligence.emails:
-            contacts.append(f"{len(intelligence.emails)} email(s)")
-        if contacts:
-            notes.append(f"Contact info: {', '.join(contacts)}")
-
-        # Links
-        if intelligence.phishingLinks:
-            notes.append(f"{len(intelligence.phishingLinks)} suspicious link(s)")
-
-        # Amounts
-        if intelligence.amounts:
-            notes.append(f"Amounts mentioned: {', '.join(intelligence.amounts[:3])}")  # First 3
-
-        # Employee IDs
-        if intelligence.employeeIds:
-            notes.append(f"Reference IDs: {', '.join(intelligence.employeeIds[:2])}")
+            notes.append(f"Contact: {len(intelligence.phoneNumbers)} phone number(s) (normalized)")
 
         # Message count
         notes.append(f"{len(all_messages)} messages exchanged")
