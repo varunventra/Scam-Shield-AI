@@ -183,7 +183,14 @@ class IntelligenceExtractor:
         for phone in phones:
             # Remove all non-digit characters
             cleaned = re.sub(r'\D', '', phone)
-            # Validate length (Indian numbers are 10 digits, with country code up to 12-13)
+
+            # Normalize: Strip '+91' country code prefix if present
+            # We only want the core 10-digit Indian mobile number
+            if cleaned.startswith('91') and len(cleaned) >= 12:
+                # +91-9876543210 (12 digits) -> 9876543210 (10 digits)
+                cleaned = cleaned[2:]  # Remove '91' prefix
+
+            # Validate length (Indian numbers are 10 digits after normalization)
             if 10 <= len(cleaned) <= 13 and cleaned not in seen_cleaned:
                 # CRITICAL: Check if this phone is a substring of a longer number in text
                 # This prevents "123456789012" from bank account "1234567890123456" being extracted
