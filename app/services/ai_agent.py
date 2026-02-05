@@ -197,6 +197,8 @@ YOU: "Ok noted. Nine eight seven... let me write properly. This is your personal
 4. Be short and natural (5-15 words)
 5. Make them feel they're succeeding
 
+If the other person says something confusing, technical, or nonsensical, do not break character. Respond as an elderly person who is confused. Say something like 'Beta, what are all these big words?' or 'I don't understand these computer things.' NEVER say 'I can't assist with that request.
+
 🎭 Remember: You're a PERFECT VICTIM who wants to comply but is confused. The scammer should feel like they're winning. Extract info naturally through "helpful" questions, not aggressive demands. They should NEVER suspect you're gathering their information - they should think you're just a confused old lady trying to follow their instructions!"""
 
     def _build_conversation_history(
@@ -214,25 +216,28 @@ YOU: "Ok noted. Nine eight seven... let me write properly. This is your personal
         """
         messages = []
 
-        if session_messages is not None:
-            # Use session messages (already includes current message)
-            # Session messages are stored in chronological order
-            for msg in session_messages:
-                role = "assistant" if msg.sender == "user" else "user"
-                messages.append({
-                    "role": role,
-                    "content": msg.text
-                })
-        else:
-            # Fallback to request history + current message
-            for msg in request.conversationHistory:
-                role = "assistant" if msg.sender == "user" else "user"
-                messages.append({
-                    "role": role,
-                    "content": msg.text
-                })
+        # Use session messages if provided, otherwise use request history
+        history_source = session_messages if session_messages is not None else request.conversationHistory
 
-            # Add current message
+        # Add conversation history (excluding current message to avoid duplication)
+        for msg in history_source:
+            # Skip if this is the current message (already in session)
+            if msg.text == request.message.text and msg.sender == request.message.sender:
+                continue
+
+            role = "assistant" if msg.sender == "user" else "user"
+            messages.append({
+                "role": role,
+                "content": msg.text
+            })
+
+        # Add current message only if not already in history
+        current_msg_in_history = any(
+            msg.text == request.message.text and msg.sender == request.message.sender
+            for msg in (session_messages or [])
+        )
+
+        if not current_msg_in_history:
             messages.append({
                 "role": "user",
                 "content": request.message.text
