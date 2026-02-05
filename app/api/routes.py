@@ -168,6 +168,7 @@ async def handle_conversation(
             )
 
             # HARD FLOOR: Check if callback should be sent (ONLY at 18+ messages)
+            # SAFETY TRIGGER: Also send if conversation ends early (after turn 10) to avoid zero score
             should_send = await callback_handler.should_send_callback(
                 request.sessionId,
                 session.scam_detected,
@@ -175,7 +176,10 @@ async def handle_conversation(
                 intelligence
             )
 
-            if should_send and not session.callback_sent:
+            # Safety fallback: If GUVI stops responding before turn 18, send what we have
+            safety_trigger = should_end and message_count >= 10 and intelligence is not None
+
+            if (should_send or safety_trigger) and not session.callback_sent:
                 # Prepare and send final result
                 final_payload = FinalResultPayload(
                     sessionId=request.sessionId,
