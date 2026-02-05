@@ -147,10 +147,12 @@ async def handle_conversation(
         should_end = await ai_agent.should_end_conversation(request)
         message_count = session.get_message_count()
 
-        # CRITICAL: Wait for SUBSTANTIAL engagement before sending callback
-        # Scammers typically reveal phone numbers, UPI IDs after 8-10 messages
-        # This ensures we capture ALL intelligence before reporting to GUVI
-        if should_end or message_count >= 10:  # Wait for substantial engagement (10+ messages)
+        # MULTI-CONDITION TRIGGER: Extract intelligence after minimum engagement
+        # Then check if we should send callback based on:
+        # 1. Meaningful intelligence extracted (bank/UPI/phone/link) + 3+ messages, OR
+        # 2. Substantial engagement (10+ messages) as fallback
+        intelligence = None
+        if message_count >= 3:  # Start checking after minimum engagement
             # Extract intelligence from all messages
             all_messages = session.messages
             intelligence = intelligence_extractor.extract_intelligence(request, all_messages)
@@ -166,11 +168,12 @@ async def handle_conversation(
                 intelligence=intelligence
             )
 
-            # Check if callback should be sent
+            # Check if callback should be sent (with intelligence data)
             should_send = await callback_handler.should_send_callback(
                 request.sessionId,
                 session.scam_detected,
-                message_count
+                message_count,
+                intelligence  # Pass intelligence for smart trigger
             )
 
             if should_send and not session.callback_sent:

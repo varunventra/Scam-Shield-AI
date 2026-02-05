@@ -2,10 +2,13 @@
 Callback handler for sending final results to GUVI evaluation endpoint.
 """
 import httpx
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from app.core.config import settings
 from app.core.logging import logger
 from app.models.responses import FinalResultPayload
+
+if TYPE_CHECKING:
+    from app.models.responses import ExtractedIntelligence
 
 
 class CallbackHandler:
@@ -68,35 +71,51 @@ class CallbackHandler:
         self,
         session_id: str,
         scam_detected: bool,
-        message_count: int
+        message_count: int,
+        intelligence: Optional['ExtractedIntelligence'] = None
     ) -> bool:
         """
-        Determine if callback should be sent.
+        Determine if callback should be sent using multi-condition trigger.
 
         Args:
             session_id: Session identifier
             scam_detected: Whether scam was detected
             message_count: Number of messages exchanged
+            intelligence: Extracted intelligence (optional)
 
         Returns:
             True if callback should be sent
         """
-        # Send callback only if:
-        # 1. Scam was detected
-        # 2. SUBSTANTIAL engagement occurred (at least 10 exchanges)
-        # This ensures we capture phone numbers, UPI IDs, and other intel
-        # that scammers typically reveal after several turns
-        should_send = scam_detected and message_count >= 10
+        # Multi-Condition Trigger:
+        # Send callback if scam detected AND either:
+        # 1. We've extracted meaningful intelligence (bank/UPI/phone/link) + minimum 3 messages, OR
+        # 2. Substantial engagement occurred (25+ messages) as fallback
+
+        has_meaningful_intel = False
+        if intelligence:
+            has_meaningful_intel = (
+                len(intelligence.bankAccounts) > 0 or
+                len(intelligence.upiIds) > 0 or
+                len(intelligence.phoneNumbers) > 0 or
+                len(intelligence.phishingLinks) > 0
+            )
+
+        should_send = scam_detected and (
+            (has_meaningful_intel and message_count >= 3) or  # Got intel early
+            message_count >= 25  # Fallback after substantial engagement
+        )
 
         if should_send:
+            reason = "intelligence extracted" if has_meaningful_intel else "message threshold reached"
             logger.info(
                 f"Callback criteria met - Session: {session_id}, "
-                f"Messages: {message_count}"
+                f"Messages: {message_count}, Reason: {reason}"
             )
         else:
             logger.debug(
                 f"Callback criteria not met - Session: {session_id}, "
-                f"Scam: {scam_detected}, Messages: {message_count}"
+                f"Scam: {scam_detected}, Messages: {message_count}, "
+                f"Intel: {has_meaningful_intel}"
             )
 
         return should_send

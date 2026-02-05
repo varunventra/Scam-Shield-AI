@@ -150,16 +150,17 @@ class IntelligenceExtractor:
         """Extract UPI IDs."""
         upi_ids = re.findall(self.UPI_ID_PATTERN, text)
         # More permissive validation - accept if:
-        # 1. Contains known UPI providers
+        # 1. Contains known UPI providers OR common keywords like 'bank', 'pay'
         # 2. Has @ symbol and looks like identifier@provider format
         # 3. At least 5 characters (to avoid false positives like "a@b")
         valid_upis = [
             upi for upi in upi_ids
             if (len(upi) >= 5 and '@' in upi and
-                # Either known provider OR looks like valid format (word@word)
+                # Either known provider/keyword OR looks like valid format (word@word)
                 (any(provider in upi.lower() for provider in
                      ['paytm', 'phonepe', 'gpay', 'upi', 'ybl', 'okaxis', 'okhdfcbank', 'ibl', 'axl',
-                      'sbi', 'hdfc', 'icici', 'axis', 'pnb', 'kotak', 'barodampay', 'federal'])
+                      'sbi', 'hdfc', 'icici', 'axis', 'pnb', 'kotak', 'barodampay', 'federal',
+                      'bank', 'pay'])  # Added common keywords to catch fake providers like "fakebank", "scampay"
                  or (len(upi.split('@')) == 2 and
                      len(upi.split('@')[0]) >= 3 and
                      len(upi.split('@')[1]) >= 3)))
