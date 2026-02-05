@@ -26,6 +26,10 @@ class ExtractedIntelligence(BaseModel):
     phishingLinks: List[str] = Field(default_factory=list, description="Phishing URLs found")
     phoneNumbers: List[str] = Field(default_factory=list, description="Phone numbers extracted")
     suspiciousKeywords: List[str] = Field(default_factory=list, description="Suspicious keywords detected")
+    emails: List[str] = Field(default_factory=list, description="Email addresses extracted")
+    amounts: List[str] = Field(default_factory=list, description="Monetary amounts mentioned")
+    employeeIds: List[str] = Field(default_factory=list, description="Employee/Reference IDs extracted")
+    impersonationTargets: List[str] = Field(default_factory=list, description="Banks/companies being impersonated")
 
 
 class FinalResultPayload(BaseModel):

@@ -121,6 +121,7 @@ def main():
         ("tests/test_api.py", "Core API Tests (Authentication, Endpoints, Format)"),
         ("tests/test_all_scenarios.py", "All Scam Scenarios from TEST_EXAMPLES.md"),
         ("tests/test_persona_validation.py", "Persona Validation (Realistic Responses)"),
+        ("tests/test_intelligence_extraction.py", "Intelligence Extraction (Critical)"),
     ]
 
     results = {}

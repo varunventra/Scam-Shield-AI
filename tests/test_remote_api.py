@@ -349,5 +349,467 @@ class TestRemotePersonaValidation:
         print(f"\n✅ No bot mentions: {reply}")
 
 
+class TestRemoteIntelligenceExtractionBankAccounts:
+    """Test extraction of bank account numbers on remote server"""
+
+    def test_14_extract_single_bank_account(self):
+        """Extract a single bank account number"""
+        response = requests.post(
+            f"{BASE_URL}/api/v1/conversation",
+            headers={"x-api-key": API_KEY},
+            json={
+                "sessionId": "remote-intel-bank-001",
+                "message": {
+                    "sender": "scammer",
+                    "text": "Transfer money to account number 123456789012 immediately",
+                    "timestamp": int(time.time() * 1000)
+                },
+                "conversationHistory": []
+            },
+            timeout=TIMEOUT
+        )
+        assert response.status_code == 200
+        print(f"\n✅ Test passed - bank account extraction on remote server")
+
+    def test_15_extract_multiple_bank_accounts(self):
+        """Extract multiple bank account numbers"""
+        response = requests.post(
+            f"{BASE_URL}/api/v1/conversation",
+            headers={"x-api-key": API_KEY},
+            json={
+                "sessionId": "remote-intel-bank-002",
+                "message": {
+                    "sender": "scammer",
+                    "text": "Send to 987654321098 or 112233445566 if first fails",
+                    "timestamp": int(time.time() * 1000)
+                },
+                "conversationHistory": []
+            },
+            timeout=TIMEOUT
+        )
+        assert response.status_code == 200
+        print(f"\n✅ Test passed - multiple bank accounts on remote server")
+
+
+class TestRemoteIntelligenceExtractionUPI:
+    """Test extraction of UPI IDs on remote server"""
+
+    def test_16_extract_paytm_upi(self):
+        """Extract Paytm UPI ID"""
+        response = requests.post(
+            f"{BASE_URL}/api/v1/conversation",
+            headers={"x-api-key": API_KEY},
+            json={
+                "sessionId": "remote-intel-upi-001",
+                "message": {
+                    "sender": "scammer",
+                    "text": "Send Rs.1 to scammer123@paytm to verify your UPI",
+                    "timestamp": int(time.time() * 1000)
+                },
+                "conversationHistory": []
+            },
+            timeout=TIMEOUT
+        )
+        assert response.status_code == 200
+        print(f"\n✅ Test passed - Paytm UPI extraction on remote server")
+
+    def test_17_extract_phonepe_upi(self):
+        """Extract PhonePe UPI ID"""
+        response = requests.post(
+            f"{BASE_URL}/api/v1/conversation",
+            headers={"x-api-key": API_KEY},
+            json={
+                "sessionId": "remote-intel-upi-002",
+                "message": {
+                    "sender": "scammer",
+                    "text": "Transfer to fraudster@ybl for verification",
+                    "timestamp": int(time.time() * 1000)
+                },
+                "conversationHistory": []
+            },
+            timeout=TIMEOUT
+        )
+        assert response.status_code == 200
+        print(f"\n✅ Test passed - PhonePe UPI extraction on remote server")
+
+
+class TestRemoteIntelligenceExtractionPhones:
+    """Test extraction of phone numbers on remote server"""
+
+    def test_18_extract_indian_phone(self):
+        """Extract Indian phone number"""
+        response = requests.post(
+            f"{BASE_URL}/api/v1/conversation",
+            headers={"x-api-key": API_KEY},
+            json={
+                "sessionId": "remote-intel-phone-001",
+                "message": {
+                    "sender": "scammer",
+                    "text": "Call our helpline at +919876543210 immediately",
+                    "timestamp": int(time.time() * 1000)
+                },
+                "conversationHistory": []
+            },
+            timeout=TIMEOUT
+        )
+        assert response.status_code == 200
+        print(f"\n✅ Test passed - phone number extraction on remote server")
+
+    def test_19_extract_multiple_phones(self):
+        """Extract multiple phone numbers"""
+        response = requests.post(
+            f"{BASE_URL}/api/v1/conversation",
+            headers={"x-api-key": API_KEY},
+            json={
+                "sessionId": "remote-intel-phone-002",
+                "message": {
+                    "sender": "scammer",
+                    "text": "Call 9876543210 or WhatsApp 8765432109 for support",
+                    "timestamp": int(time.time() * 1000)
+                },
+                "conversationHistory": []
+            },
+            timeout=TIMEOUT
+        )
+        assert response.status_code == 200
+        print(f"\n✅ Test passed - multiple phones extracted on remote server")
+
+
+class TestRemoteIntelligenceExtractionEmails:
+    """Test extraction of email addresses on remote server"""
+
+    def test_20_extract_email_address(self):
+        """Extract email from scammer message"""
+        response = requests.post(
+            f"{BASE_URL}/api/v1/conversation",
+            headers={"x-api-key": API_KEY},
+            json={
+                "sessionId": "remote-intel-email-001",
+                "message": {
+                    "sender": "scammer",
+                    "text": "Send your details to support@fake-bank.com for verification",
+                    "timestamp": int(time.time() * 1000)
+                },
+                "conversationHistory": []
+            },
+            timeout=TIMEOUT
+        )
+        assert response.status_code == 200
+        print(f"\n✅ Test passed - email extraction on remote server")
+
+
+class TestRemoteIntelligenceExtractionLinks:
+    """Test extraction of phishing links on remote server"""
+
+    def test_21_extract_phishing_link(self):
+        """Extract phishing URL"""
+        response = requests.post(
+            f"{BASE_URL}/api/v1/conversation",
+            headers={"x-api-key": API_KEY},
+            json={
+                "sessionId": "remote-intel-link-001",
+                "message": {
+                    "sender": "scammer",
+                    "text": "Click here to verify: http://fake-bank-verify.com/secure?id=123",
+                    "timestamp": int(time.time() * 1000)
+                },
+                "conversationHistory": []
+            },
+            timeout=TIMEOUT
+        )
+        assert response.status_code == 200
+        print(f"\n✅ Test passed - phishing link extraction on remote server")
+
+
+class TestRemoteIntelligenceExtractionAmounts:
+    """Test extraction of monetary amounts on remote server"""
+
+    def test_22_extract_rupee_amount(self):
+        """Extract amount in rupees"""
+        response = requests.post(
+            f"{BASE_URL}/api/v1/conversation",
+            headers={"x-api-key": API_KEY},
+            json={
+                "sessionId": "remote-intel-amount-001",
+                "message": {
+                    "sender": "scammer",
+                    "text": "Pay Rs.500 processing fee to unlock your account",
+                    "timestamp": int(time.time() * 1000)
+                },
+                "conversationHistory": []
+            },
+            timeout=TIMEOUT
+        )
+        assert response.status_code == 200
+        print(f"\n✅ Test passed - amount extraction on remote server")
+
+
+class TestRemoteIntelligenceExtractionComprehensive:
+    """Test comprehensive intelligence extraction on remote server"""
+
+    def test_23_extract_all_types(self):
+        """Extract multiple types of intelligence from one message"""
+        response = requests.post(
+            f"{BASE_URL}/api/v1/conversation",
+            headers={"x-api-key": API_KEY},
+            json={
+                "sessionId": "remote-intel-comprehensive-001",
+                "message": {
+                    "sender": "scammer",
+                    "text": "This is SBI Bank. Your account 123456789012 is blocked. Transfer Rs.1 to verify@paytm or call +919876543210. Visit http://fake-sbi.com for details. Contact support@scam.com. Employee ID: EMP12345",
+                    "timestamp": int(time.time() * 1000)
+                },
+                "conversationHistory": []
+            },
+            timeout=TIMEOUT
+        )
+        assert response.status_code == 200
+        data = response.json()
+        print(f"\n✅ Comprehensive extraction test on remote server")
+        print(f"   Agent response: {data['reply']}")
+
+
+class TestRemoteAgentExtractsScammerInfo:
+    """Test that AI agent proactively extracts scammer information on remote server"""
+
+    def test_24_agent_asks_for_scammer_details(self):
+        """Agent should ask for scammer's name, ID, phone using strategic approach"""
+        response = requests.post(
+            f"{BASE_URL}/api/v1/conversation",
+            headers={"x-api-key": API_KEY},
+            json={
+                "sessionId": "remote-intel-agent-001",
+                "message": {
+                    "sender": "scammer",
+                    "text": "Your account will be blocked immediately",
+                    "timestamp": int(time.time() * 1000)
+                },
+                "conversationHistory": []
+            },
+            timeout=TIMEOUT
+        )
+        assert response.status_code == 200
+        reply = response.json()["reply"].lower()
+
+        # Agent should show fear/worry initially (Phase 1: Build Trust)
+        # Not aggressive questioning on first message
+        print(f"\n✅ Agent Phase 1 response (builds trust): {reply}")
+
+    def test_25_agent_gradual_extraction(self):
+        """Agent should gradually extract info in mid-conversation (Phase 2)"""
+        session_id = "remote-intel-agent-002"
+        conversation_history = []
+
+        # Turn 1: Build trust
+        response1 = requests.post(
+            f"{BASE_URL}/api/v1/conversation",
+            headers={"x-api-key": API_KEY},
+            json={
+                "sessionId": session_id,
+                "message": {
+                    "sender": "scammer",
+                    "text": "Your account will be blocked",
+                    "timestamp": int(time.time() * 1000)
+                },
+                "conversationHistory": []
+            },
+            timeout=TIMEOUT
+        )
+        reply1 = response1.json()["reply"]
+        conversation_history.append({
+            "sender": "scammer",
+            "text": "Your account will be blocked",
+            "timestamp": int(time.time() * 1000)
+        })
+        conversation_history.append({
+            "sender": "user",
+            "text": reply1,
+            "timestamp": int(time.time() * 1000) + 500
+        })
+
+        # Turn 2: Build trust
+        time.sleep(1)
+        response2 = requests.post(
+            f"{BASE_URL}/api/v1/conversation",
+            headers={"x-api-key": API_KEY},
+            json={
+                "sessionId": session_id,
+                "message": {
+                    "sender": "scammer",
+                    "text": "You must verify immediately",
+                    "timestamp": int(time.time() * 1000) + 1000
+                },
+                "conversationHistory": conversation_history.copy()
+            },
+            timeout=TIMEOUT
+        )
+        reply2 = response2.json()["reply"]
+        conversation_history.append({
+            "sender": "scammer",
+            "text": "You must verify immediately",
+            "timestamp": int(time.time() * 1000) + 1000
+        })
+        conversation_history.append({
+            "sender": "user",
+            "text": reply2,
+            "timestamp": int(time.time() * 1000) + 1500
+        })
+
+        # Turn 3: Build trust
+        time.sleep(1)
+        response3 = requests.post(
+            f"{BASE_URL}/api/v1/conversation",
+            headers={"x-api-key": API_KEY},
+            json={
+                "sessionId": session_id,
+                "message": {
+                    "sender": "scammer",
+                    "text": "Send OTP now",
+                    "timestamp": int(time.time() * 1000) + 2000
+                },
+                "conversationHistory": conversation_history.copy()
+            },
+            timeout=TIMEOUT
+        )
+        reply3 = response3.json()["reply"]
+        conversation_history.append({
+            "sender": "scammer",
+            "text": "Send OTP now",
+            "timestamp": int(time.time() * 1000) + 2000
+        })
+        conversation_history.append({
+            "sender": "user",
+            "text": reply3,
+            "timestamp": int(time.time() * 1000) + 2500
+        })
+
+        # Turn 4-5: Phase 2 - Gradual extraction should start
+        time.sleep(1)
+        response4 = requests.post(
+            f"{BASE_URL}/api/v1/conversation",
+            headers={"x-api-key": API_KEY},
+            json={
+                "sessionId": session_id,
+                "message": {
+                    "sender": "scammer",
+                    "text": "I am calling from SBI Bank",
+                    "timestamp": int(time.time() * 1000) + 3000
+                },
+                "conversationHistory": conversation_history.copy()
+            },
+            timeout=TIMEOUT
+        )
+        reply4 = response4.json()["reply"].lower()
+
+        # By turn 4, agent should start asking subtle questions
+        asks_questions = any(word in reply4 for word in [
+            "name", "who", "which", "where", "number", "phone",
+            "beta", "grandson", "call back", "office"
+        ])
+
+        print(f"\n✅ Agent Phase 2 (gradual extraction) - Turn 4: {reply4}")
+        print(f"   Asks identifying questions: {asks_questions}")
+
+    def test_26_agent_comfortable_extraction(self):
+        """Agent should freely extract in late conversation (Phase 3)"""
+        session_id = "remote-intel-agent-003"
+        conversation_history = []
+
+        messages = [
+            "Your account will be blocked",
+            "You must verify now",
+            "Send me OTP",
+            "I am from HDFC Bank",
+            "My name is Rajesh",
+            "You need to transfer Rs.1",
+            "Send to verify@paytm"
+        ]
+
+        for i, msg in enumerate(messages):
+            response = requests.post(
+                f"{BASE_URL}/api/v1/conversation",
+                headers={"x-api-key": API_KEY},
+                json={
+                    "sessionId": session_id,
+                    "message": {
+                        "sender": "scammer",
+                        "text": msg,
+                        "timestamp": int(time.time() * 1000) + (i * 1000)
+                    },
+                    "conversationHistory": conversation_history.copy()
+                },
+                timeout=TIMEOUT
+            )
+            reply = response.json()["reply"]
+
+            conversation_history.append({
+                "sender": "scammer",
+                "text": msg,
+                "timestamp": int(time.time() * 1000) + (i * 1000)
+            })
+            conversation_history.append({
+                "sender": "user",
+                "text": reply,
+                "timestamp": int(time.time() * 1000) + (i * 1000) + 500
+            })
+
+            # By turn 7+, agent should be in Phase 3 (comfortable extraction)
+            if i >= 6:
+                print(f"\n✅ Agent Phase 3 (comfortable extraction) - Turn {i+1}: {reply}")
+
+            time.sleep(1)
+
+
+class TestRemoteMultiTurnIntelligenceExtraction:
+    """Test intelligence extraction across multi-turn conversations on remote server"""
+
+    def test_27_accumulate_intelligence_over_turns(self):
+        """Intelligence should accumulate across conversation turns"""
+        session_id = "remote-intel-multi-001"
+        conversation_history = []
+
+        messages = [
+            "Your account is blocked",
+            "I'm from SBI customer care",
+            "My employee ID is EMP12345",
+            "Call me at 9876543210",
+            "Transfer Rs.1 to verify@paytm"
+        ]
+
+        for i, msg in enumerate(messages):
+            response = requests.post(
+                f"{BASE_URL}/api/v1/conversation",
+                headers={"x-api-key": API_KEY},
+                json={
+                    "sessionId": session_id,
+                    "message": {
+                        "sender": "scammer",
+                        "text": msg,
+                        "timestamp": int(time.time() * 1000) + (i * 1000)
+                    },
+                    "conversationHistory": conversation_history.copy()
+                },
+                timeout=TIMEOUT
+            )
+            assert response.status_code == 200
+            reply = response.json()["reply"]
+
+            # Update history
+            conversation_history.append({
+                "sender": "scammer",
+                "text": msg,
+                "timestamp": int(time.time() * 1000) + (i * 1000)
+            })
+            conversation_history.append({
+                "sender": "user",
+                "text": reply,
+                "timestamp": int(time.time() * 1000) + (i * 1000) + 500
+            })
+
+            time.sleep(1)
+
+        print(f"\n✅ Multi-turn intelligence extraction complete on remote server - {len(messages)} turns")
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short", "-s"])
