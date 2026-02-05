@@ -147,9 +147,10 @@ async def handle_conversation(
         should_end = await ai_agent.should_end_conversation(request)
         message_count = session.get_message_count()
 
-        # Send callback after sufficient engagement (minimum 3 messages for quality)
-        # No maximum limit - conversation continues as long as GUVI sends messages
-        if should_end or message_count >= 3:  # Minimum engagement for callback
+        # CRITICAL: Wait for SUBSTANTIAL engagement before sending callback
+        # Scammers typically reveal phone numbers, UPI IDs after 8-10 messages
+        # This ensures we capture ALL intelligence before reporting to GUVI
+        if should_end or message_count >= 10:  # Wait for substantial engagement (10+ messages)
             # Extract intelligence from all messages
             all_messages = session.messages
             intelligence = intelligence_extractor.extract_intelligence(request, all_messages)

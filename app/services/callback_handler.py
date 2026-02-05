@@ -83,8 +83,10 @@ class CallbackHandler:
         """
         # Send callback only if:
         # 1. Scam was detected
-        # 2. Sufficient engagement occurred (at least 3 exchanges)
-        should_send = scam_detected and message_count >= 3
+        # 2. SUBSTANTIAL engagement occurred (at least 10 exchanges)
+        # This ensures we capture phone numbers, UPI IDs, and other intel
+        # that scammers typically reveal after several turns
+        should_send = scam_detected and message_count >= 10
 
         if should_send:
             logger.info(
