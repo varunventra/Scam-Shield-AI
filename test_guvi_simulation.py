@@ -176,8 +176,9 @@ class GUVISimulator:
         # Filter out obvious emails
         upi_ids = [u for u in upi_ids if 'paytm' in u or 'ybl' in u or 'okaxis' in u or 'oksbi' in u]
 
-        # Extract phone numbers
-        phone_numbers = list(set(re.findall(r'\+?91?[6-9]\d{9}', all_text)))
+        # Extract phone numbers (updated pattern to match server-side)
+        phone_pattern = r'(?:\+91[-\.\s]?)?[6789]\d{9}\b|(?:\+\d{1,3}[-\.\s]?)?(?:\(?\d{3,4}\)?[-\.\s]?)?\d{3,4}[-\.\s]?\d{3,4}'
+        phone_numbers = list(set(re.findall(phone_pattern, all_text)))
 
         # Extract URLs
         phishing_links = list(set(re.findall(r'http[s]?://[^\s]+', all_text)))
