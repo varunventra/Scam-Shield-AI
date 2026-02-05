@@ -102,25 +102,31 @@ class IntelligenceExtractor:
         # Extract company/bank names
         impersonation_targets = self._extract_companies_banks(scammer_text)
 
-        # Extract tactics used
+        # Extract tactics used (for agentNotes only, not for GUVI keywords)
         tactics = self._analyze_tactics(scammer_text)
 
-        # Combine all findings
+        # Extract suspicious keywords (REAL words only, no tactics tags)
         suspicious_keywords = self._extract_keywords(all_text)
-        suspicious_keywords.extend(tactics)  # Add tactics to keywords
 
-        # Create intelligence object
+        # GUVI REQUIREMENT: suspiciousKeywords should contain ACTUAL scam words,
+        # not internal tactics tags like "URGENCY_TACTICS"
+        # Tactics are stored separately for agentNotes generation
+
+        # Create intelligence object with deduplication
         intelligence = ExtractedIntelligence(
-            bankAccounts=bank_accounts,
-            upiIds=upi_ids,
-            phishingLinks=phishing_links,
-            phoneNumbers=phone_numbers,
-            suspiciousKeywords=list(set(suspicious_keywords)),  # Deduplicate
-            emails=emails,
-            amounts=amounts,
-            employeeIds=employee_ids,
-            impersonationTargets=impersonation_targets
+            bankAccounts=list(set(bank_accounts)),  # Deduplicate
+            upiIds=list(set(upi_ids)),  # Deduplicate
+            phishingLinks=list(set(phishing_links)),  # Deduplicate
+            phoneNumbers=list(set(phone_numbers)),  # Deduplicate
+            suspiciousKeywords=list(set(suspicious_keywords)),  # Deduplicate (REAL words only)
+            emails=list(set(emails)),  # Deduplicate (internal use)
+            amounts=list(set(amounts)),  # Deduplicate (internal use)
+            employeeIds=list(set(employee_ids)),  # Deduplicate (internal use)
+            impersonationTargets=list(set(impersonation_targets))  # Deduplicate (internal use)
         )
+
+        # Store tactics separately for use in agentNotes
+        intelligence._tactics = tactics  # Internal use only
 
         logger.info(
             f"✅ Intelligence extracted - Session: {request.sessionId}, "
@@ -286,11 +292,24 @@ class IntelligenceExtractor:
         """
         notes = []
 
-        # Analyze tactics
-        tactics_found = [kw for kw in intelligence.suspiciousKeywords
-                        if kw.endswith('_TACTICS') or kw.endswith('_REQUEST') or kw.endswith('_REDIRECTION')]
+        # Analyze tactics (from internal _tactics attribute, not keywords)
+        tactics_found = getattr(intelligence, '_tactics', [])
         if tactics_found:
-            notes.append(f"Tactics: {', '.join(tactics_found)}")
+            # Convert tactics tags to readable descriptions
+            tactics_readable = []
+            for tactic in tactics_found:
+                if tactic == "URGENCY_TACTICS":
+                    tactics_readable.append("urgency")
+                elif tactic == "THREAT_TACTICS":
+                    tactics_readable.append("threats")
+                elif tactic == "REWARD_TACTICS":
+                    tactics_readable.append("rewards")
+                elif tactic == "CREDENTIAL_REQUEST":
+                    tactics_readable.append("credential requests")
+                elif tactic == "PAYMENT_REDIRECTION":
+                    tactics_readable.append("payment redirection")
+            if tactics_readable:
+                notes.append(f"Tactics: {', '.join(tactics_readable)}")
 
         # Impersonation
         if intelligence.impersonationTargets:

@@ -143,10 +143,13 @@ async def handle_conversation(
         session_manager.add_message_to_session(request.sessionId, agent_message)
 
         # Check if we should extract intelligence and send callback
+        # GUVI REQUIREMENT: No artificial conversation limit - let GUVI decide when to stop
         should_end = await ai_agent.should_end_conversation(request)
         message_count = session.get_message_count()
 
-        if should_end or message_count >= 6:  # Send callback after sufficient engagement
+        # Send callback after sufficient engagement (minimum 3 messages for quality)
+        # No maximum limit - conversation continues as long as GUVI sends messages
+        if should_end or message_count >= 3:  # Minimum engagement for callback
             # Extract intelligence from all messages
             all_messages = session.messages
             intelligence = intelligence_extractor.extract_intelligence(request, all_messages)

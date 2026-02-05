@@ -495,19 +495,17 @@ YOU: "ok i trust you. will my pension be safe?"
         """
         Determine if conversation should be ended.
 
+        GUVI REQUIREMENT: No artificial conversation limit.
+        Let GUVI decide when to stop testing by not sending more messages.
+        The agent will continue engaging as long as messages are received.
+
         Args:
-            request: Current conversation request
+            request: Current conversation request (kept for interface compatibility)
 
         Returns:
-            True if conversation should end
+            False - agent never ends conversation on its own
         """
-        message_count = self._count_messages(request)
-
-        if message_count >= settings.max_conversation_turns:
-            logger.info(
-                f"Ending conversation - Session: {request.sessionId}, "
-                f"Reason: Max turns reached ({message_count})"
-            )
-            return True
-
+        # No artificial limit - GUVI controls conversation length
+        # Conversation ends only when GUVI stops sending messages
+        _ = request  # Acknowledged for interface compatibility
         return False

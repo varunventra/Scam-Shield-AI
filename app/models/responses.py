@@ -20,16 +20,24 @@ class ConversationResponse(BaseModel):
 
 
 class ExtractedIntelligence(BaseModel):
-    """Intelligence extracted from the conversation."""
+    """
+    Intelligence extracted from the conversation.
+
+    GUVI REQUIREMENTS: Only these 5 fields are required for evaluation.
+    Extra fields are excluded from serialization to GUVI callback.
+    """
+    # === REQUIRED FIELDS FOR GUVI (these 5 ONLY) ===
     bankAccounts: List[str] = Field(default_factory=list, description="Extracted bank account numbers")
     upiIds: List[str] = Field(default_factory=list, description="Extracted UPI IDs")
     phishingLinks: List[str] = Field(default_factory=list, description="Phishing URLs found")
     phoneNumbers: List[str] = Field(default_factory=list, description="Phone numbers extracted")
     suspiciousKeywords: List[str] = Field(default_factory=list, description="Suspicious keywords detected")
-    emails: List[str] = Field(default_factory=list, description="Email addresses extracted")
-    amounts: List[str] = Field(default_factory=list, description="Monetary amounts mentioned")
-    employeeIds: List[str] = Field(default_factory=list, description="Employee/Reference IDs extracted")
-    impersonationTargets: List[str] = Field(default_factory=list, description="Banks/companies being impersonated")
+
+    # === INTERNAL FIELDS (excluded from GUVI callback, can be used in agentNotes) ===
+    emails: List[str] = Field(default_factory=list, description="Email addresses extracted", exclude=True)
+    amounts: List[str] = Field(default_factory=list, description="Monetary amounts mentioned", exclude=True)
+    employeeIds: List[str] = Field(default_factory=list, description="Employee/Reference IDs extracted", exclude=True)
+    impersonationTargets: List[str] = Field(default_factory=list, description="Banks/companies being impersonated", exclude=True)
 
 
 class FinalResultPayload(BaseModel):
