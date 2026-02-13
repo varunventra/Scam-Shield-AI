@@ -12,3 +12,6 @@ httpx==0.26.0
 
 # Environment Variables
 python-dotenv==1.0.0
+
+# PDF Report Generation
+fpdf2==2.8.5

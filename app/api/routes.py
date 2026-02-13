@@ -6,7 +6,7 @@ from app.core.security import verify_api_key
 from app.core.logging import logger
 from app.models.requests import ConversationRequest
 from app.models.responses import ConversationResponse, FinalResultPayload
-from app.services import ScamDetector, AIAgent, IntelligenceExtractor, CallbackHandler
+from app.services import ScamDetector, AIAgent, IntelligenceExtractor, CallbackHandler, ForensicReporter
 from app.storage import session_manager
 from app.utils import validate_session_id
 
@@ -18,6 +18,7 @@ scam_detector = ScamDetector()
 ai_agent = AIAgent()
 intelligence_extractor = IntelligenceExtractor()
 callback_handler = CallbackHandler()
+forensic_reporter = ForensicReporter()
 
 
 @router.post("/conversation", response_model=ConversationResponse)
@@ -196,6 +197,21 @@ async def handle_conversation(
                         request.sessionId,
                         callback_sent=True
                     )
+
+                # Generate forensic PDF report alongside the JSON callback
+                try:
+                    report_path = forensic_reporter.generate_forensic_report(
+                        session_id=request.sessionId,
+                        extracted_intelligence=intelligence,
+                        conversation_history=session.messages,
+                        agent_notes=agent_notes,
+                        scam_detected=session.scam_detected,
+                        total_messages=message_count
+                    )
+                    if report_path:
+                        logger.info(f"Forensic PDF report saved: {report_path}")
+                except Exception as report_err:
+                    logger.error(f"Forensic report generation failed (non-blocking): {report_err}")
 
         return ConversationResponse(
             status="success",
