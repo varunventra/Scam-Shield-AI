@@ -19,3 +19,6 @@ pymongo==4.6.1
 
 # PDF Report Generation
 fpdf2==2.8.5
+
+# Language Detection
+langdetect==1.0.9

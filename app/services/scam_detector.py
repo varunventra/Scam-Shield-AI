@@ -13,9 +13,9 @@ from app.models.requests import ConversationRequest
 class ScamDetector:
     """Detects scam intent in messages using AI with rule-based fallback."""
 
-    # Scam keywords for rule-based detection
+    # Scam keywords for rule-based detection (English + Hindi + Telugu)
     SCAM_KEYWORDS = [
-        # Urgency
+        # Urgency (English)
         "urgent", "immediately", "now", "today", "suspended", "blocked", "expire",
         # Verification/Authentication
         "verify", "confirm", "authenticate", "validate", "update", "kYC", "kyc",
@@ -30,6 +30,22 @@ class ScamDetector:
         "click here", "link", "http", "https", "bit.ly",
         # Impersonation
         "customer care", "customer support", "helpline", "helpdesk",
+        # --- Hindi / Hinglish scam keywords ---
+        "turant", "abhi", "fauran", "jaldi",                # urgency
+        "khata", "paisa", "rupaye", "rashi",                 # money/account
+        "band", "block", "suspend",                           # threats
+        "kanooni karwai", "police", "giraftar",              # legal threats
+        "jama", "bhejo", "transfer",                          # transfer requests
+        "sathyapan", "jaanch",                                # verification
+        "inam", "lottery", "jeet",                            # prize/lottery
+        # --- Telugu scam keywords ---
+        "urgentuga", "ventane", "ippudu",                     # urgency
+        "khata", "dabbu", "mottam",                           # money/account
+        "nilipi", "block",                                    # blocked/suspended
+        "chattapara charya", "arrest",                        # legal threats
+        "pampandi", "chellimpulu",                            # send/transfer
+        "dhruvikarana",                                       # verification
+        "bahumathi", "lottery", "gelavadam",                  # prize/lottery
     ]
 
     def __init__(self):

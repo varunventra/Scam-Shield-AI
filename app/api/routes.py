@@ -12,7 +12,10 @@ from app.core.security import verify_api_key, verify_admin_key
 from app.core.logging import logger
 from app.models.requests import ConversationRequest, Message
 from app.models.responses import ConversationResponse, FinalResultPayload
-from app.services import ScamDetector, AIAgent, IntelligenceExtractor, CallbackHandler, ForensicReporter
+from app.services import (
+    ScamDetector, AIAgent, IntelligenceExtractor, CallbackHandler, ForensicReporter,
+    detect_language, detect_response_language, select_persona, get_persona_prompt,
+)
 from app.storage import session_manager
 from app.storage.mongodb import (
     deduplicate_intelligence,
@@ -151,6 +154,41 @@ async def handle_conversation(
                 )
 
         # -----------------------------------------------------------------
+        # LANGUAGE DETECTION + PERSONA SELECTION
+        # -----------------------------------------------------------------
+        metadata_language = None
+        if request.metadata and hasattr(request.metadata, "language"):
+            metadata_language = request.metadata.language
+
+        detected_lang = detect_language(request.message.text, metadata_language)
+        response_lang = detect_response_language(detected_lang, request.message.text)
+
+        # Build conversation history text for persona selection context
+        history_text = " ".join(
+            msg.text for msg in request.conversationHistory
+        ) if request.conversationHistory else ""
+
+        chosen_persona = select_persona(
+            message_text=request.message.text,
+            conversation_history_text=history_text,
+            existing_persona=session.persona_selected,
+        )
+        persona_prompt = get_persona_prompt(chosen_persona, response_lang)
+
+        # Persist language + persona to in-memory session
+        session_manager.update_session(
+            request.sessionId,
+            detected_language=detected_lang,
+            response_language=response_lang,
+            persona_selected=chosen_persona,
+        )
+
+        logger.info(
+            f"Language: {detected_lang}, Persona: {chosen_persona} - "
+            f"Session: {request.sessionId}"
+        )
+
+        # -----------------------------------------------------------------
         # REPEAT SCAMMER DETECTION (early pass for adaptive prompt)
         # -----------------------------------------------------------------
         repeat_info = None
@@ -189,6 +227,8 @@ async def handle_conversation(
             request,
             session_messages,
             repeat_matches=repeat_matches_for_prompt,
+            persona_prompt=persona_prompt,
+            language=response_lang,
         )
 
         # Add agent's response to session history
@@ -311,6 +351,10 @@ async def handle_conversation(
                 callback_sent=callback_sent,
                 callback_sent_at=callback_sent_at,
                 repeat_info=repeat_info,
+                detected_language=session.detected_language,
+                response_language=session.response_language,
+                persona_selected=session.persona_selected,
+                persona_switch_history=session.persona_switch_history,
             )
         except Exception as db_err:
             logger.error(f"MongoDB persistence failed (non-blocking): {db_err}")

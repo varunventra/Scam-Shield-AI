@@ -22,6 +22,11 @@ class SessionData:
     created_at: datetime = field(default_factory=datetime.now)
     last_updated: datetime = field(default_factory=datetime.now)
     callback_sent: bool = False
+    # Multi-persona + multilingual fields
+    detected_language: str = "english"
+    response_language: str = "english"
+    persona_selected: Optional[str] = None
+    persona_switch_history: List[str] = field(default_factory=list)
 
     def add_message(self, message: Message) -> None:
         """Add a message to the session."""
@@ -99,7 +104,10 @@ class SessionManager:
         scam_confidence: Optional[float] = None,
         agent_activated: Optional[bool] = None,
         intelligence: Optional[ExtractedIntelligence] = None,
-        callback_sent: Optional[bool] = None
+        callback_sent: Optional[bool] = None,
+        detected_language: Optional[str] = None,
+        response_language: Optional[str] = None,
+        persona_selected: Optional[str] = None,
     ) -> Optional[SessionData]:
         """
         Update session data.
@@ -111,6 +119,9 @@ class SessionManager:
             agent_activated: Whether agent is activated
             intelligence: Extracted intelligence
             callback_sent: Whether callback was sent
+            detected_language: Detected language of scammer messages
+            response_language: Language agent should respond in
+            persona_selected: Currently active persona key
 
         Returns:
             Updated session data if exists
@@ -130,6 +141,15 @@ class SessionManager:
             session.intelligence = intelligence
         if callback_sent is not None:
             session.callback_sent = callback_sent
+        if detected_language is not None:
+            session.detected_language = detected_language
+        if response_language is not None:
+            session.response_language = response_language
+        if persona_selected is not None:
+            # Track persona switches
+            if session.persona_selected and session.persona_selected != persona_selected:
+                session.persona_switch_history.append(session.persona_selected)
+            session.persona_selected = persona_selected
 
         session.last_updated = datetime.now()
         logger.debug(f"Updated session: {session_id}")

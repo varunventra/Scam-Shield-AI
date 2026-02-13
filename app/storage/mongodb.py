@@ -237,6 +237,10 @@ async def upsert_session(
     callback_sent: bool = False,
     callback_sent_at: Optional[datetime] = None,
     repeat_info: Optional[Dict[str, Any]] = None,
+    detected_language: str = "english",
+    response_language: str = "english",
+    persona_selected: Optional[str] = None,
+    persona_switch_history: Optional[List[str]] = None,
 ) -> bool:
     """
     Upsert the full session record into MongoDB.
@@ -274,6 +278,10 @@ async def upsert_session(
             "repeatMatches": (repeat_info or {}).get("repeatMatches", {}),
             "repeatSessionIds": (repeat_info or {}).get("repeatSessionIds", []),
             "riskLevel": risk_level,
+            "detectedLanguage": detected_language,
+            "responseLanguage": response_language,
+            "personaSelected": persona_selected,
+            "personaSwitchHistory": persona_switch_history or [],
         },
         "$setOnInsert": {
             "sessionId": session_id,
