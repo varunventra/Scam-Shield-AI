@@ -1,6 +1,7 @@
 """
 API routes for the Scambot Honeypot system.
 """
+import re
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -413,3 +414,35 @@ async def cleanup_sessions(api_key: str = Depends(verify_api_key)):
         "removed_sessions": removed_count,
         "active_sessions": session_manager.get_session_count()
     }
+
+
+@router.get("/admin/db-status")
+async def admin_db_status(admin_key: str = Depends(verify_admin_key)):
+    """Diagnostic: check MongoDB connectivity and report errors."""
+    from app.core.config import settings as _s
+    uri = _s.mongodb_uri
+    # Mask password in URI for safe display
+    masked = re.sub(r"://([^:]+):([^@]+)@", r"://\1:****@", uri) if uri else "(empty)"
+
+    result = {"mongodb_uri_set": bool(uri), "mongodb_uri_masked": masked}
+
+    if not uri:
+        result["error"] = "MONGODB_URI environment variable is empty"
+        return result
+
+    try:
+        from motor.motor_asyncio import AsyncIOMotorClient
+        client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=5000)
+        await client.admin.command("ping")
+        result["connected"] = True
+        result["databases"] = await client.list_database_names()
+        db = client["honeypot"]
+        result["collections"] = await db.list_collection_names()
+        col = db["scam_sessions"]
+        result["document_count"] = await col.count_documents({})
+        client.close()
+    except Exception as exc:
+        result["connected"] = False
+        result["error"] = f"{type(exc).__name__}: {str(exc)}"
+
+    return result
