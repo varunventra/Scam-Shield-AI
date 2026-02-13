@@ -30,7 +30,7 @@ class ScamDetector:
         "click here", "link", "http", "https", "bit.ly",
         # Impersonation
         "customer care", "customer support", "helpline", "helpdesk",
-        # --- Hindi / Hinglish scam keywords ---
+        # --- Hindi / Hinglish scam keywords (transliterated) ---
         "turant", "abhi", "fauran", "jaldi",                # urgency
         "khata", "paisa", "rupaye", "rashi",                 # money/account
         "band", "block", "suspend",                           # threats
@@ -38,7 +38,17 @@ class ScamDetector:
         "jama", "bhejo", "transfer",                          # transfer requests
         "sathyapan", "jaanch",                                # verification
         "inam", "lottery", "jeet",                            # prize/lottery
-        # --- Telugu scam keywords ---
+        # --- Hindi (Devanagari script) ---
+        "तुरंत", "अभी", "फौरन", "जल्दी",                      # urgency
+        "खाता", "पैसा", "रुपये", "राशि",                       # money/account
+        "बंद", "ब्लॉक", "निलंबित",                              # blocked/suspended
+        "कानूनी कार्रवाई", "पुलिस", "गिरफ्तार",                  # legal threats
+        "भेजो", "ट्रांसफर", "जमा",                              # transfer
+        "सत्यापन", "जाँच", "केवाईसी",                           # verification
+        "इनाम", "लॉटरी", "जीत",                                # prize/lottery
+        "ओटीपी", "पासवर्ड", "पिन", "आधार",                     # sensitive info
+        "बैंक", "खाता बंद", "सस्पेंड",                          # banking threats
+        # --- Telugu (transliterated) ---
         "urgentuga", "ventane", "ippudu",                     # urgency
         "khata", "dabbu", "mottam",                           # money/account
         "nilipi", "block",                                    # blocked/suspended
@@ -46,6 +56,16 @@ class ScamDetector:
         "pampandi", "chellimpulu",                            # send/transfer
         "dhruvikarana",                                       # verification
         "bahumathi", "lottery", "gelavadam",                  # prize/lottery
+        # --- Telugu (Telugu script) ---
+        "తురంతుగా", "వెంటనే", "ఇప్పుడు",                        # urgency
+        "ఖాతా", "డబ్బు", "మొత్తం", "రూపాయలు",                   # money/account
+        "నిలిపి", "బ్లాక్", "సస్పెండ్",                          # blocked/suspended
+        "చట్టపర చర్య", "పోలీసు", "అరెస్ట్",                     # legal threats
+        "పంపండి", "చెల్లింపులు", "ట్రాన్స్‌ఫర్",                  # transfer
+        "ధృవీకరణ", "కేవైసీ",                                    # verification
+        "బహుమతి", "లాటరీ", "గెలవడం",                            # prize/lottery
+        "ఓటీపీ", "పాస్‌వర్డ్", "పిన్", "ఆధార్",                  # sensitive info
+        "బ్యాంక్", "ఖాతా బంద్",                                 # banking threats
     ]
 
     def __init__(self):
