@@ -1,7 +1,7 @@
 """
 AI Agent for engaging with scammers in human-like conversations.
 """
-from typing import List
+from typing import Dict, List, Optional
 from openai import OpenAI
 from app.core.config import settings
 from app.core.logging import logger
@@ -423,6 +423,77 @@ YOU: "can you send me the link?" ❌ (ignores their threat)
 - "too confusing. just tell is my account ok?"
 🎭 Remember: You're a PERFECT VICTIM who wants to comply but is confused. The scammer should feel like they're winning. Extract info naturally through "helpful" questions, not aggressive demands. They should NEVER suspect you're gathering their information - they should think you're just a confused old lady trying to follow their instructions!"""
 
+    def _build_adaptive_prompt_section(self, repeat_matches: Optional[Dict] = None) -> str:
+        """
+        Build an additional prompt section that steers the agent to extract
+        NEW intelligence when dealing with a repeat scammer.
+
+        Args:
+            repeat_matches: dict with keys phoneNumbers, upiIds, bankAccounts,
+                            phishingLinks – lists of already-known entities.
+
+        Returns:
+            Extra prompt text to append to the system prompt, or empty string.
+        """
+        if not repeat_matches:
+            return ""
+
+        known_phones = repeat_matches.get("phoneNumbers", [])
+        known_upis = repeat_matches.get("upiIds", [])
+        known_accounts = repeat_matches.get("bankAccounts", [])
+        known_links = repeat_matches.get("phishingLinks", [])
+
+        has_anything = known_phones or known_upis or known_accounts or known_links
+        if not has_anything:
+            return ""
+
+        lines = [
+            "",
+            "🚨 REPEAT SCAMMER DETECTED – ADAPTIVE STRATEGY:",
+            "This scammer has been seen before. You already know some of their details.",
+            "Your NEW mission: extract intelligence we do NOT already have.",
+            "",
+        ]
+
+        if known_phones:
+            lines.append(f"✅ ALREADY KNOWN phone numbers: {', '.join(known_phones)}")
+            lines.append("   → Do NOT waste time re-extracting phone numbers.")
+            lines.append("   → Instead try to get their UPI ID, payment link, or alternate number.")
+        if known_upis:
+            lines.append(f"✅ ALREADY KNOWN UPI IDs: {', '.join(known_upis)}")
+            lines.append("   → Do NOT ask for UPI again.")
+            lines.append("   → Instead try to get bank account number, bank branch, or phishing link.")
+        if known_accounts:
+            lines.append(f"✅ ALREADY KNOWN bank accounts: {', '.join(known_accounts)}")
+            lines.append("   → Do NOT ask for bank account again.")
+            lines.append("   → Instead try to get employee ID, scam group name, or secondary contact.")
+        if known_links:
+            lines.append(f"✅ ALREADY KNOWN phishing links: {', '.join(known_links)}")
+            lines.append("   → Do NOT ask for links again.")
+            lines.append("   → Instead try to get employee ID, bank branch, or personal details.")
+
+        lines.extend([
+            "",
+            "🎯 PRIORITY TARGETS (things we still need):",
+        ])
+        targets = []
+        if not known_phones:
+            targets.append("phone number")
+        if not known_upis:
+            targets.append("UPI ID (@ address)")
+        if not known_accounts:
+            targets.append("bank account number")
+        if not known_links:
+            targets.append("phishing link / portal URL")
+        # Always try for bonus intel
+        targets.extend(["employee ID", "scam group name", "secondary contact", "bank branch name"])
+        lines.append(f"   → {', '.join(targets)}")
+        lines.append("")
+        lines.append("Be more goal-driven. Steer conversation toward the missing intelligence.")
+        lines.append("Use phrases like: 'beta give me that payment link', 'which branch?', 'what is your staff ID?'")
+
+        return "\n".join(lines)
+
     def _build_conversation_history(
         self,
         request: ConversationRequest,
@@ -485,7 +556,8 @@ YOU: "can you send me the link?" ❌ (ignores their threat)
     async def generate_response(
         self,
         request: ConversationRequest,
-        session_messages: List = None
+        session_messages: List = None,
+        repeat_matches: Optional[Dict] = None
     ) -> str:
         """
         Generate a human-like response to the scammer's message.
@@ -495,6 +567,7 @@ YOU: "can you send me the link?" ❌ (ignores their threat)
         Args:
             request: Conversation request with message and history
             session_messages: Optional list of messages from session storage
+            repeat_matches: Optional dict of already-known entities for adaptive behaviour
 
         Returns:
             Agent's response text
@@ -513,6 +586,13 @@ YOU: "can you send me the link?" ❌ (ignores their threat)
                 f"Messages: {len(conversation_history)}"
             )
 
+            # Build system prompt – append adaptive section for repeat scammers
+            system_prompt = self._create_system_prompt()
+            adaptive_section = self._build_adaptive_prompt_section(repeat_matches)
+            if adaptive_section:
+                system_prompt += adaptive_section
+                logger.info(f"🔄 Repeat scammer adaptive prompt injected - Session: {request.sessionId}")
+
             # Call OpenAI API (synchronous call in async function is fine)
             logger.debug(f"🔄 Calling OpenAI API...")
             response = self.client.chat.completions.create(
@@ -520,7 +600,7 @@ YOU: "can you send me the link?" ❌ (ignores their threat)
                 messages=[
                     {
                         "role": "system",
-                        "content": self._create_system_prompt()
+                        "content": system_prompt
                     },
                     *conversation_history
                 ],

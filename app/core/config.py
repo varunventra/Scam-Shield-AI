@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     openai_temperature: float = Field(default=0.7, env="OPENAI_TEMPERATURE")
     max_tokens: int = Field(default=1000, env="MAX_TOKENS")
 
+    # MongoDB Configuration
+    mongodb_uri: str = Field(default="", env="MONGODB_URI")
+
+    # Admin API Key
+    admin_api_key: str = Field(default="", env="ADMIN_API_KEY")
+
     # GUVI Callback
     guvi_callback_url: str = Field(
         default="https://hackathon.guvi.in/api/updateHoneyPotFinalResult",
@@ -70,6 +76,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "ignore"
 
 
 def validate_configuration():

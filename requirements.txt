@@ -13,5 +13,9 @@ httpx==0.26.0
 # Environment Variables
 python-dotenv==1.0.0
 
+# MongoDB (async driver)
+motor==3.3.2
+pymongo==4.6.1
+
 # PDF Report Generation
 fpdf2==2.8.5
