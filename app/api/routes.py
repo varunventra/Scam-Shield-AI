@@ -292,31 +292,52 @@ async def handle_conversation(
         )
         session_manager.add_message_to_session(request.sessionId, agent_message)
 
+       
         # -----------------------------------------------------------------
-        # FULL INTELLIGENCE EXTRACTION (turn 3+)
+        # FULL INTELLIGENCE EXTRACTION + FORENSIC REPORT (turn 3+)
         # -----------------------------------------------------------------
         intelligence = None
         agent_notes = ""
         should_end = await ai_agent.should_end_conversation(request)
         message_count = session.get_message_count()
 
-        if message_count >= 3:
+        if message_count >= 3 and session.scam_detected:
             all_messages = session.messages
+
             intelligence = intelligence_extractor.extract_intelligence(request, all_messages)
+
             agent_notes = intelligence_extractor.generate_agent_notes(
                 request, all_messages, intelligence
             )
+
+            # Save intelligence in memory
             session_manager.update_session(
                 request.sessionId,
                 intelligence=intelligence
             )
 
-            # Re-run repeat detection with fuller intelligence
+            # Re-run repeat detection with full intelligence
             try:
                 intel_dict = deduplicate_intelligence(intelligence.model_dump())
                 repeat_info = await find_repeat_matches(request.sessionId, intel_dict)
             except Exception as exc:
                 logger.error(f"Repeat detection failed (non-blocking): {exc}")
+
+            # Generate forensic PDF report
+            try:
+                report_path = forensic_reporter.generate_forensic_report(
+                    session_id=request.sessionId,
+                    extracted_intelligence=intelligence,
+                    conversation_history=session.messages,
+                    agent_notes=agent_notes,
+                    scam_detected=session.scam_detected,
+                    total_messages=message_count
+                )
+                if report_path:
+                    logger.info(f"Forensic PDF report saved: {report_path}")
+            except Exception as report_err:
+                logger.error(f"Forensic report generation failed (non-blocking): {report_err}")
+
 
         # -----------------------------------------------------------------
         # CALLBACK LOGIC
@@ -355,20 +376,6 @@ async def handle_conversation(
                         callback_sent=True
                     )
 
-                # Generate forensic PDF report
-                try:
-                    report_path = forensic_reporter.generate_forensic_report(
-                        session_id=request.sessionId,
-                        extracted_intelligence=intelligence,
-                        conversation_history=session.messages,
-                        agent_notes=agent_notes,
-                        scam_detected=session.scam_detected,
-                        total_messages=message_count
-                    )
-                    if report_path:
-                        logger.info(f"Forensic PDF report saved: {report_path}")
-                except Exception as report_err:
-                    logger.error(f"Forensic report generation failed (non-blocking): {report_err}")
 
         # -----------------------------------------------------------------
         # PERSIST TO MONGODB (non-blocking – DB failure never breaks API)
