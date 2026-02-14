@@ -9,6 +9,7 @@ from app.services.persona_manager import (
     select_persona, get_persona_prompt, detect_identity, lock_identity_after_threshold,
 )
 from app.services import ml_detector
+from app.services.conversation_strategy import ConversationStrategy
 
 __all__ = [
     "ScamDetector",
@@ -25,4 +26,5 @@ __all__ = [
     "detect_identity",
     "lock_identity_after_threshold",
     "ml_detector",
+    "ConversationStrategy",
 ]

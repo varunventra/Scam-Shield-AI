@@ -48,6 +48,8 @@ class SessionData:
     scam_type: str = "UNKNOWN"
     detection_method: str = "none"
     detected_indicators: List[str] = field(default_factory=list)
+    # Strategic conversation state (initialized lazily to avoid circular import)
+    conversation_strategy: Optional[object] = None
 
     def add_message(self, message: Message) -> None:
         """Add a message to the session."""

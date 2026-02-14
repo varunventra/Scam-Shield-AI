@@ -17,6 +17,7 @@ from app.services import (
     detect_language, detect_response_language, select_persona, get_persona_prompt,
     detect_identity, lock_identity_after_threshold,
 )
+from app.services.conversation_strategy import ConversationStrategy
 from app.services.scam_detector import DetectionResult
 from app.storage import session_manager
 from app.storage.mongodb import (
@@ -265,7 +266,14 @@ async def handle_conversation(
                 logger.error(f"Early repeat detection failed (non-blocking): {exc}")
 
         # -----------------------------------------------------------------
-        # GENERATE AGENT RESPONSE (with adaptive prompt if repeat scammer)
+        # INITIALIZE/RETRIEVE CONVERSATION STRATEGY
+        # -----------------------------------------------------------------
+        if session.conversation_strategy is None:
+            session.conversation_strategy = ConversationStrategy()
+            logger.info(f"Initialized conversation strategy - Session: {request.sessionId}")
+
+        # -----------------------------------------------------------------
+        # GENERATE AGENT RESPONSE (with strategic extraction guidance)
         # -----------------------------------------------------------------
         logger.info(f"Generating agent response - Session: {request.sessionId}")
 
@@ -275,13 +283,18 @@ async def handle_conversation(
             f"Session: {request.sessionId}"
         )
 
+        # Pass extracted intelligence to strategy for informed extraction
+        known_intel = early_intel_dict if early_intel_dict else {}
+
         agent_response = await ai_agent.generate_response(
             request,
             session_messages,
             repeat_matches=repeat_matches_for_prompt,
             persona_prompt=persona_prompt,
+            known_intelligence=known_intel,
             language=response_lang,
             identity=updated_identity,
+            conversation_strategy=session.conversation_strategy,
         )
 
         # Add agent's response to session history

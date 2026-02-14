@@ -7,6 +7,11 @@ from app.core.config import settings
 from app.core.logging import logger
 from app.models.requests import ConversationRequest, Message
 from app.storage.session_manager import DetectedIdentity
+from app.services.conversation_strategy import (
+    ConversationStrategy,
+    update_strategy_state,
+    build_extraction_strategy_prompt,
+)
 
 
 class AIAgent:
@@ -345,6 +350,7 @@ Respond as a confused person: "not understanding. simple words please"
         known_intelligence: Optional[Dict] = None,
         language: str = "english",
         identity: Optional[DetectedIdentity] = None,
+        conversation_strategy: Optional[ConversationStrategy] = None,
     ) -> str:
         """
         Generate a human-like response to the scammer's message.
@@ -356,7 +362,10 @@ Respond as a confused person: "not understanding. simple words please"
             session_messages: Optional list of messages from session storage
             repeat_matches: Optional dict of already-known entities for adaptive behaviour
             persona_prompt: Persona-specific prompt block from persona_manager
+            known_intelligence: Already extracted intelligence to avoid re-asking
             language: Detected language ("english", "hindi", "telugu")
+            identity: Detected identity from scammer cues
+            conversation_strategy: Strategic conversation state for intelligence extraction
 
         Returns:
             Agent's response text
@@ -375,31 +384,61 @@ Respond as a confused person: "not understanding. simple words please"
                 f"Messages: {len(conversation_history)}"
             )
 
-            # Build system prompt with persona + language + identity – append adaptive section for repeat scammers
+            # Build system prompt with persona + language + identity
             system_prompt = self._create_system_prompt(
                 persona_prompt=persona_prompt,
                 language=language,
                 identity=identity,
             )
-            adaptive_section = self._build_adaptive_prompt_section(repeat_matches)
-            if adaptive_section:
-                system_prompt += adaptive_section
-                logger.info(f"🔄 Repeat scammer adaptive prompt injected - Session: {request.sessionId}")
 
-            if known_intelligence:
-                system_prompt += f"""
+            # Inject strategic extraction prompt if strategy is provided
+            if conversation_strategy:
+                # Build conversation history text for strategy
+                conv_history_text = " ".join(
+                    msg.text for msg in (session_messages or [])
+                )
 
-            KNOWN EXTRACTED INTELLIGENCE (DO NOT ASK AGAIN):
-            - phoneNumbers: {known_intelligence.get("phoneNumbers", [])}
-            - bankAccounts: {known_intelligence.get("bankAccounts", [])}
-            - upiIds: {known_intelligence.get("upiIds", [])}
-            - phishingLinks: {known_intelligence.get("phishingLinks", [])}
-            - emails: {known_intelligence.get("emails", [])}
+                # Update strategy state with latest message and intelligence
+                updated_strategy = update_strategy_state(
+                    strategy=conversation_strategy,
+                    latest_message=request.message.text,
+                    extracted_intelligence=known_intelligence or {},
+                    conversation_history=conv_history_text,
+                )
 
-            RULE:
-            If an item exists here, do NOT ask for it again.
-            Instead confirm it or move to a new target.
-            """
+                # Build and inject strategic extraction guidance
+                strategy_prompt = build_extraction_strategy_prompt(
+                    strategy=updated_strategy,
+                    authority_type=updated_strategy.authority_type,
+                    language=language,
+                )
+                system_prompt += strategy_prompt
+                logger.info(
+                    f"🎯 Strategic extraction prompt injected - Session: {request.sessionId}, "
+                    f"Turn: {updated_strategy.turn_count}, Authority: {updated_strategy.authority_type}, "
+                    f"Trust: {updated_strategy.trust_level}, Pressure: {updated_strategy.scammer_pressure}"
+                )
+            else:
+                # Fallback to legacy adaptive section for repeat scammers
+                adaptive_section = self._build_adaptive_prompt_section(repeat_matches)
+                if adaptive_section:
+                    system_prompt += adaptive_section
+                    logger.info(f"🔄 Repeat scammer adaptive prompt injected - Session: {request.sessionId}")
+
+                if known_intelligence:
+                    system_prompt += f"""
+
+                KNOWN EXTRACTED INTELLIGENCE (DO NOT ASK AGAIN):
+                - phoneNumbers: {known_intelligence.get("phoneNumbers", [])}
+                - bankAccounts: {known_intelligence.get("bankAccounts", [])}
+                - upiIds: {known_intelligence.get("upiIds", [])}
+                - phishingLinks: {known_intelligence.get("phishingLinks", [])}
+                - emails: {known_intelligence.get("emails", [])}
+
+                RULE:
+                If an item exists here, do NOT ask for it again.
+                Instead confirm it or move to a new target.
+                """
 
 
             # Call OpenAI API (synchronous call in async function is fine)
