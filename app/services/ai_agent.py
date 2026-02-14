@@ -312,6 +312,7 @@ Respond as a confused person: "not understanding. simple words please"
         session_messages: List = None,
         repeat_matches: Optional[Dict] = None,
         persona_prompt: Optional[str] = None,
+        known_intelligence: Optional[Dict] = None,
         language: str = "english",
     ) -> str:
         """
@@ -352,6 +353,22 @@ Respond as a confused person: "not understanding. simple words please"
             if adaptive_section:
                 system_prompt += adaptive_section
                 logger.info(f"🔄 Repeat scammer adaptive prompt injected - Session: {request.sessionId}")
+
+            if known_intelligence:
+                system_prompt += f"""
+
+            KNOWN EXTRACTED INTELLIGENCE (DO NOT ASK AGAIN):
+            - phoneNumbers: {known_intelligence.get("phoneNumbers", [])}
+            - bankAccounts: {known_intelligence.get("bankAccounts", [])}
+            - upiIds: {known_intelligence.get("upiIds", [])}
+            - phishingLinks: {known_intelligence.get("phishingLinks", [])}
+            - emails: {known_intelligence.get("emails", [])}
+
+            RULE:
+            If an item exists here, do NOT ask for it again.
+            Instead confirm it or move to a new target.
+            """
+
 
             # Call OpenAI API (synchronous call in async function is fine)
             logger.debug(f"🔄 Calling OpenAI API...")
@@ -426,3 +443,38 @@ Respond as a confused person: "not understanding. simple words please"
         # Conversation ends only when GUVI stops sending messages
         _ = request  # Acknowledged for interface compatibility
         return False
+
+
+def _build_missing_targets_section(self, known_intelligence: Dict) -> str:
+    if not known_intelligence:
+        return ""
+
+    phones = known_intelligence.get("phoneNumbers", [])
+    accounts = known_intelligence.get("bankAccounts", [])
+    upis = known_intelligence.get("upiIds", [])
+    links = known_intelligence.get("phishingLinks", [])
+
+    missing = []
+    if not phones:
+        missing.append("phone number")
+    if not accounts:
+        missing.append("bank account number")
+    if not upis:
+        missing.append("UPI ID")
+    if not links:
+        missing.append("phishing link / portal URL")
+
+    if not missing:
+        missing.append("employee ID / branch name / reference number")
+
+    return f"""
+
+🎯 CURRENT EXTRACTION GOAL:
+We already extracted: phones={phones}, accounts={accounts}, upis={upis}, links={links}
+
+Now your next target is: {', '.join(missing)}
+
+RULE:
+Ask only ONE new thing per message.
+Never ask for already known info.
+"""

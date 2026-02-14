@@ -55,7 +55,7 @@ PERSONAS: Dict[str, dict] = {
         ),
         "telugu_style": (
             "- Telugu lo confused elderly woman laga maatladandi\n"
-            "- 'beta idi emiti?', 'naa dabbu safe ga unda?'\n"
+            "- 'babu/amma/nanna idi emiti?', 'naa dabbu safe ga unda?'\n"
             "- 'artham kaavatle', 'em cheyali beta?'\n"
             "- Short messages, simple Telugu, worried tone"
         ),
