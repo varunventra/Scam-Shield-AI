@@ -253,6 +253,24 @@ async def handle_conversation(
             agent_notes = intelligence_extractor.generate_agent_notes(
                 request, all_messages, intelligence
             )
+
+        # -----------------------------------------------------------------
+# ALWAYS GENERATE FORENSIC REPORT (turn 3+)
+# -----------------------------------------------------------------
+        try:
+            report_path = forensic_reporter.generate_forensic_report(
+                session_id=request.sessionId,
+                extracted_intelligence=intelligence,
+                conversation_history=session.messages,
+                agent_notes=agent_notes,
+                scam_detected=session.scam_detected,
+                total_messages=message_count
+            )
+            if report_path:
+                logger.info(f"Forensic PDF report saved: {report_path}")
+        except Exception as report_err:
+            logger.error(f"Forensic report generation failed (non-blocking): {report_err}")
+               
             session_manager.update_session(
                 request.sessionId,
                 intelligence=intelligence
@@ -302,20 +320,6 @@ async def handle_conversation(
                         callback_sent=True
                     )
 
-                # Generate forensic PDF report
-                try:
-                    report_path = forensic_reporter.generate_forensic_report(
-                        session_id=request.sessionId,
-                        extracted_intelligence=intelligence,
-                        conversation_history=session.messages,
-                        agent_notes=agent_notes,
-                        scam_detected=session.scam_detected,
-                        total_messages=message_count
-                    )
-                    if report_path:
-                        logger.info(f"Forensic PDF report saved: {report_path}")
-                except Exception as report_err:
-                    logger.error(f"Forensic report generation failed (non-blocking): {report_err}")
 
         # -----------------------------------------------------------------
         # PERSIST TO MONGODB (non-blocking – DB failure never breaks API)
