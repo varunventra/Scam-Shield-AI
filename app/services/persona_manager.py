@@ -3,11 +3,16 @@ Dynamic multi-persona manager.
 
 Selects a persona based on scam type / scammer wording, maintains session
 consistency, and returns language-aware prompt templates.
+
+Includes dynamic identity detection: infers the name, gender, and age-group
+the scammer assumes, and locks it for the whole session.
 """
+import re
 from typing import Dict, List, Optional, Tuple
 
 from app.core.config import settings
 from app.core.logging import logger
+from app.storage.session_manager import DetectedIdentity
 
 # ===================================================================
 # PERSONA DEFINITIONS
@@ -220,8 +225,8 @@ _BANK_OTP_KEYWORDS = [
 ]
 
 # Address terms → persona hints
-_MALE_ADDRESS = ["sir", "mr", "boss", "bhai", "sahab"]
-_FEMALE_ADDRESS = ["madam", "aunty", "amma", "didi", "akka"]
+_MALE_ADDRESS = ["sir", "mr", "boss", "bhai", "sahab", "uncle", "bhaiya"]
+_FEMALE_ADDRESS = ["madam", "aunty", "amma", "didi", "akka", "aunty ji"]
 
 
 def _classify_scam_type(text: str) -> Optional[str]:
@@ -246,6 +251,164 @@ def _detect_address_gender(text: str) -> Optional[str]:
     if female_hits > male_hits:
         return "female"
     return None
+
+
+# ===================================================================
+# IDENTITY DETECTION — name, gender, age-group inference
+# ===================================================================
+
+# Age-group keyword lists
+_ELDERLY_CUES = [
+    "pension", "retired", "grandfather", "grandmother", "uncle", "aunty",
+    "aunty ji", "daadi", "naani", "thaatha", "ammamma",
+]
+_YOUNG_CUES = [
+    "student", "college", "bro", "dude", "campus", "hostel", "scholarship",
+    "placement", "degree", "semester",
+]
+_MIDDLE_CUES = [
+    "salary", "office", "manager", "employee", "company",
+    "professional",
+]
+
+# Name extraction: "Hi Hansika", "Hello Rahul ji", "Dear Mr. Kumar"
+_NAME_GREETING_PATTERN = re.compile(
+    r"(?:^|\b)(?:hi|hello|hey|dear|respected|mr\.?|mrs\.?|ms\.?|shri|smt)\s+"
+    r"([A-Z][a-z]{1,20}(?:\s[A-Z][a-z]{1,20})?)",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+# Suffix patterns: "Hansika ji", "Rahul sir", "Priya madam"
+_NAME_SUFFIX_PATTERN = re.compile(
+    r"\b([A-Z][a-z]{2,15})\s+(?:ji|sir|madam|sahab|uncle|aunty|amma|anna|akka|bhai|didi)\b",
+    re.IGNORECASE,
+)
+
+# Common false-positive names to filter out
+_NAME_BLACKLIST = {
+    "sir", "madam", "dear", "hello", "bank", "this", "your", "please",
+    "the", "customer", "account", "verify", "click", "send", "call",
+    "pay", "transfer", "amount", "urgent", "immediately", "blocked",
+}
+
+# Persona-category → default age group
+_PERSONA_AGE_DEFAULTS = {
+    "grandmother": "elderly",
+    "professional": "middle_aged",
+    "student": "young",
+    "business_owner": "middle_aged",
+}
+
+# Persona-category → default gender
+_PERSONA_GENDER_DEFAULTS = {
+    "grandmother": "female",
+    "professional": None,
+    "student": None,
+    "business_owner": None,
+}
+
+# Age-group → concrete values for prompt injection
+_AGE_GROUP_VALUES = {
+    "elderly": {"age": 64, "occupation": "Retired school teacher"},
+    "middle_aged": {"age": 35, "occupation": "IT professional"},
+    "young": {"age": 21, "occupation": "College student"},
+}
+
+
+def detect_identity(
+    message_text: str,
+    conversation_history_text: str,
+    existing_identity: DetectedIdentity,
+    persona_category: str,
+) -> DetectedIdentity:
+    """
+    Detect name, gender, and age_group from scammer messages.
+
+    If already locked, returns unchanged. Otherwise scans for new cues
+    and merges into existing identity. Locks if all three fields are set.
+    """
+    if existing_identity.locked:
+        return existing_identity
+
+    all_text = f"{conversation_history_text} {message_text}"
+
+    # --- NAME ---
+    name = existing_identity.name
+    if name is None:
+        for pattern in (_NAME_GREETING_PATTERN, _NAME_SUFFIX_PATTERN):
+            match = pattern.search(message_text)
+            if not match:
+                match = pattern.search(all_text)
+            if match:
+                candidate = match.group(1).strip()
+                if candidate.lower() not in _NAME_BLACKLIST:
+                    name = candidate
+                    break
+
+    # --- GENDER ---
+    gender = existing_identity.gender
+    if gender is None:
+        gender = _detect_address_gender(all_text)
+        if gender is None and persona_category:
+            gender = _PERSONA_GENDER_DEFAULTS.get(persona_category)
+
+    # --- AGE GROUP ---
+    age_group = existing_identity.age_group
+    if age_group is None:
+        text_lower = all_text.lower()
+        scores = {
+            "elderly": sum(1 for k in _ELDERLY_CUES if k in text_lower),
+            "young": sum(1 for k in _YOUNG_CUES if k in text_lower),
+            "middle_aged": sum(1 for k in _MIDDLE_CUES if k in text_lower),
+        }
+        best = max(scores, key=scores.get)
+        if scores[best] > 0:
+            age_group = best
+        elif persona_category:
+            age_group = _PERSONA_AGE_DEFAULTS.get(persona_category)
+
+    updated = DetectedIdentity(
+        name=name,
+        gender=gender,
+        age_group=age_group,
+        locked=False,
+    )
+
+    # Lock if all fields populated
+    if updated.name is not None and updated.gender is not None and updated.age_group is not None:
+        updated.locked = True
+        logger.info(f"Identity LOCKED: name={updated.name}, gender={updated.gender}, age_group={updated.age_group}")
+
+    return updated
+
+
+def lock_identity_after_threshold(
+    identity: DetectedIdentity,
+    turn_count: int,
+    persona_category: str,
+    threshold: int = 3,
+) -> DetectedIdentity:
+    """
+    Force-lock identity after `threshold` scammer turns.
+    Fills remaining None fields with persona-compatible defaults.
+    """
+    if identity.locked or turn_count < threshold:
+        return identity
+
+    gender = identity.gender or _PERSONA_GENDER_DEFAULTS.get(persona_category)
+    age_group = identity.age_group or _PERSONA_AGE_DEFAULTS.get(persona_category, "middle_aged")
+
+    locked = DetectedIdentity(
+        name=identity.name,  # May still be None — prompt will be nameless
+        gender=gender,
+        age_group=age_group,
+        locked=True,
+    )
+    logger.info(
+        f"Identity force-locked at turn {turn_count}: "
+        f"name={locked.name}, gender={locked.gender}, age_group={locked.age_group}"
+    )
+    return locked
 
 
 # ===================================================================
@@ -303,20 +466,42 @@ def select_persona(
     return chosen
 
 
-def get_persona_prompt(persona_name: str, language: str = "english") -> str:
+def get_persona_prompt(
+    persona_name: str,
+    language: str = "english",
+    identity: Optional[DetectedIdentity] = None,
+) -> str:
     """
     Build the full persona-specific section of the system prompt.
 
     This returns the CHARACTER + STYLE + EXTRACTION blocks.
     The caller (AIAgent) wraps it with character-lock + common strategy.
+
+    If a DetectedIdentity is provided, it overrides the env-var defaults
+    for name/age/occupation so the agent mirrors the scammer's assumption.
     """
     persona = PERSONAS.get(persona_name, PERSONAS["grandmother"])
 
-    name = settings.agent_name
-    age = settings.agent_age
-    occupation = settings.agent_occupation
+    # Determine identity values: detected > age-group defaults > env vars
+    if identity and identity.name:
+        name = identity.name
+    else:
+        name = ""  # No name — prompt will say "You are a ..." (nameless)
 
-    profile = persona["profile"].format(name=name, age=age, occupation=occupation)
+    if identity and identity.age_group:
+        age_defaults = _AGE_GROUP_VALUES.get(identity.age_group, {})
+        age = age_defaults.get("age", settings.agent_age)
+        occupation = age_defaults.get("occupation", settings.agent_occupation)
+    else:
+        age = settings.agent_age
+        occupation = settings.agent_occupation
+
+    if name:
+        profile = persona["profile"].format(name=name, age=age, occupation=occupation)
+    else:
+        raw_profile = persona["profile"].format(name="", age=age, occupation=occupation)
+        # Clean "You are , a" → "You are a"
+        profile = raw_profile.replace("You are , a", "You are a")
     style = persona["style"]
     extraction = persona["extraction_flavour"]
 

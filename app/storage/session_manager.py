@@ -11,6 +11,19 @@ from app.models.responses import ExtractedIntelligence
 
 
 @dataclass
+class DetectedIdentity:
+    """
+    Identity inferred from the scammer's messages.
+    Separate from persona category (grandmother/professional/etc).
+    Once locked, never changes for the rest of the session.
+    """
+    name: Optional[str] = None          # e.g. "Hansika", "Rahul"
+    gender: Optional[str] = None        # "male", "female", or None
+    age_group: Optional[str] = None     # "elderly", "middle_aged", "young"
+    locked: bool = False
+
+
+@dataclass
 class SessionData:
     """Data structure for session information."""
     session_id: str
@@ -27,6 +40,14 @@ class SessionData:
     response_language: str = "english"
     persona_selected: Optional[str] = None
     persona_switch_history: List[str] = field(default_factory=list)
+    # Dynamic identity detection
+    detected_identity: DetectedIdentity = field(default_factory=DetectedIdentity)
+    # Hybrid detection fields
+    rule_score: float = 0.0
+    ml_score: Optional[float] = None
+    scam_type: str = "UNKNOWN"
+    detection_method: str = "none"
+    detected_indicators: List[str] = field(default_factory=list)
 
     def add_message(self, message: Message) -> None:
         """Add a message to the session."""
@@ -97,6 +118,9 @@ class SessionManager:
             session = self.create_session(session_id)
         return session
 
+    # Sentinel for distinguishing "not passed" from "passed as None"
+    _UNSET = object()
+
     def update_session(
         self,
         session_id: str,
@@ -108,20 +132,15 @@ class SessionManager:
         detected_language: Optional[str] = None,
         response_language: Optional[str] = None,
         persona_selected: Optional[str] = None,
+        rule_score: Optional[float] = None,
+        ml_score: object = _UNSET,  # sentinel: None means "ML not used"
+        scam_type: Optional[str] = None,
+        detection_method: Optional[str] = None,
+        detected_indicators: Optional[List[str]] = None,
+        detected_identity: Optional[DetectedIdentity] = None,
     ) -> Optional[SessionData]:
         """
         Update session data.
-
-        Args:
-            session_id: Session identifier
-            scam_detected: Whether scam was detected
-            scam_confidence: Confidence score
-            agent_activated: Whether agent is activated
-            intelligence: Extracted intelligence
-            callback_sent: Whether callback was sent
-            detected_language: Detected language of scammer messages
-            response_language: Language agent should respond in
-            persona_selected: Currently active persona key
 
         Returns:
             Updated session data if exists
@@ -150,6 +169,18 @@ class SessionManager:
             if session.persona_selected and session.persona_selected != persona_selected:
                 session.persona_switch_history.append(session.persona_selected)
             session.persona_selected = persona_selected
+        if rule_score is not None:
+            session.rule_score = rule_score
+        if ml_score is not self._UNSET:
+            session.ml_score = ml_score  # Can be None (ML not used) or float
+        if scam_type is not None:
+            session.scam_type = scam_type
+        if detection_method is not None:
+            session.detection_method = detection_method
+        if detected_indicators is not None:
+            session.detected_indicators = detected_indicators
+        if detected_identity is not None:
+            session.detected_identity = detected_identity
 
         session.last_updated = datetime.now()
         logger.debug(f"Updated session: {session_id}")

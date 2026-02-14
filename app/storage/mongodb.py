@@ -51,6 +51,8 @@ async def get_collection():
         await _collection.create_index("extractedIntelligence.phishingLinks")
         await _collection.create_index("repeatScammer")
         await _collection.create_index("riskLevel")
+        await _collection.create_index("scamType")
+        await _collection.create_index("detectionMethod")
 
         logger.info("MongoDB connected – scam_sessions collection ready")
         return _collection
@@ -213,8 +215,15 @@ async def find_repeat_matches(
 # Risk level
 # ---------------------------------------------------------------------------
 
-def compute_risk_level(repeat_scammer: bool, scam_detected: bool) -> str:
+def compute_risk_level(
+    repeat_scammer: bool,
+    scam_detected: bool,
+    rule_score: float = 0.0,
+    ml_score: Optional[float] = None,
+) -> str:
     if repeat_scammer:
+        return "HIGH"
+    if scam_detected and (rule_score >= 0.75 or (ml_score is not None and ml_score >= 0.8)):
         return "HIGH"
     if scam_detected:
         return "MEDIUM"
@@ -241,6 +250,12 @@ async def upsert_session(
     response_language: str = "english",
     persona_selected: Optional[str] = None,
     persona_switch_history: Optional[List[str]] = None,
+    rule_score: float = 0.0,
+    ml_score: Optional[float] = None,
+    scam_type: str = "UNKNOWN",
+    detection_method: str = "none",
+    detected_indicators: Optional[List[str]] = None,
+    detected_identity_dict: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """
     Upsert the full session record into MongoDB.
@@ -263,7 +278,7 @@ async def upsert_session(
 
     # Repeat scammer info
     repeat_scammer = (repeat_info or {}).get("repeatScammer", False)
-    risk_level = compute_risk_level(repeat_scammer, scam_detected)
+    risk_level = compute_risk_level(repeat_scammer, scam_detected, rule_score, ml_score)
 
     update_doc: Dict[str, Any] = {
         "$set": {
@@ -282,6 +297,12 @@ async def upsert_session(
             "responseLanguage": response_language,
             "personaSelected": persona_selected,
             "personaSwitchHistory": persona_switch_history or [],
+            "ruleScore": rule_score,
+            "mlScore": ml_score,
+            "scamType": scam_type,
+            "detectionMethod": detection_method,
+            "detectedIndicators": detected_indicators or [],
+            "detectedIdentity": detected_identity_dict or {},
         },
         "$setOnInsert": {
             "sessionId": session_id,

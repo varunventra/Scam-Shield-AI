@@ -25,6 +25,17 @@ async def lifespan(app: FastAPI):
     # Validate configuration (will exit if critical errors)
     validate_configuration()
 
+    # Load ML scam detection model (optional — app runs fine without it)
+    try:
+        from app.services.ml_detector import load_model
+        loaded = load_model()
+        if loaded:
+            logger.info("ML scam detection model loaded successfully")
+        else:
+            logger.warning("ML model not loaded — hybrid detection will use rules only")
+    except Exception as ml_exc:
+        logger.warning(f"ML model loading failed (non-blocking): {ml_exc}")
+
     logger.info(f"Debug mode: {settings.debug}")
     logger.info(f"OpenAI model: {settings.openai_model}")
     logger.info("🎯 Honeypot is LIVE and ready to engage!")

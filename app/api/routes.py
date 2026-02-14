@@ -15,7 +15,9 @@ from app.models.responses import ConversationResponse, FinalResultPayload
 from app.services import (
     ScamDetector, AIAgent, IntelligenceExtractor, CallbackHandler, ForensicReporter,
     detect_language, detect_response_language, select_persona, get_persona_prompt,
+    detect_identity, lock_identity_after_threshold,
 )
+from app.services.scam_detector import DetectionResult
 from app.storage import session_manager
 from app.storage.mongodb import (
     deduplicate_intelligence,
@@ -109,23 +111,32 @@ async def handle_conversation(
         session_manager.add_message_to_session(request.sessionId, request.message)
 
         # Check if agent is already activated for this session
+        detection_result: Optional[DetectionResult] = None
+
         if not session.agent_activated:
             logger.info(f"First message - checking for scam - Session: {request.sessionId}")
 
             try:
-                should_activate = await scam_detector.should_activate_agent(request)
+                should_activate, detection_result = await scam_detector.should_activate_agent(request)
 
                 if should_activate:
-                    is_scam, confidence, reasoning = await scam_detector.detect_scam(request)
                     session_manager.update_session(
                         request.sessionId,
-                        scam_detected=is_scam,
-                        scam_confidence=confidence,
-                        agent_activated=True
+                        scam_detected=detection_result.is_scam,
+                        scam_confidence=detection_result.final_confidence,
+                        agent_activated=True,
+                        rule_score=detection_result.rule_score,
+                        ml_score=detection_result.ml_score,
+                        scam_type=detection_result.scam_type,
+                        detection_method=detection_result.detection_method,
+                        detected_indicators=detection_result.detected_indicators,
                     )
                     logger.info(
                         f"Agent activated - Session: {request.sessionId}, "
-                        f"Scam: {is_scam}, Confidence: {confidence:.2f}"
+                        f"Scam: {detection_result.is_scam}, "
+                        f"Confidence: {detection_result.final_confidence:.2f}, "
+                        f"Method: {detection_result.detection_method}, "
+                        f"Type: {detection_result.scam_type}"
                     )
                 else:
                     # HONEYPOT FAIL-OPEN
@@ -135,8 +146,13 @@ async def handle_conversation(
                     session_manager.update_session(
                         request.sessionId,
                         scam_detected=False,
-                        scam_confidence=0.3,
-                        agent_activated=True
+                        scam_confidence=detection_result.final_confidence,
+                        agent_activated=True,
+                        rule_score=detection_result.rule_score,
+                        ml_score=detection_result.ml_score,
+                        scam_type=detection_result.scam_type,
+                        detection_method=detection_result.detection_method,
+                        detected_indicators=detection_result.detected_indicators,
                     )
 
             except Exception as e:
@@ -146,11 +162,18 @@ async def handle_conversation(
                     f"Error type: {type(e).__name__}, Message: {str(e)}"
                 )
                 logger.warning("FAIL-OPEN: Engaging anyway (honeypot behavior)")
+                detection_result = DetectionResult(
+                    is_scam=True,
+                    final_confidence=0.5,
+                    reasoning=f"Detection failed: {type(e).__name__}. FAIL-OPEN.",
+                    detection_method="fail_open",
+                )
                 session_manager.update_session(
                     request.sessionId,
                     scam_detected=True,
                     scam_confidence=0.5,
-                    agent_activated=True
+                    agent_activated=True,
+                    detection_method="fail_open",
                 )
 
         # -----------------------------------------------------------------
@@ -173,18 +196,47 @@ async def handle_conversation(
             conversation_history_text=history_text,
             existing_persona=session.persona_selected,
         )
-        persona_prompt = get_persona_prompt(chosen_persona, response_lang)
 
-        # Persist language + persona to in-memory session
+        # -----------------------------------------------------------------
+        # IDENTITY DETECTION + LOCKING
+        # -----------------------------------------------------------------
+        existing_identity = session.detected_identity
+
+        if not existing_identity.locked:
+            updated_identity = detect_identity(
+                message_text=request.message.text,
+                conversation_history_text=history_text,
+                existing_identity=existing_identity,
+                persona_category=chosen_persona,
+            )
+            # Force-lock after 3 scammer turns
+            scammer_turn_count = len([
+                m for m in session.messages if m.sender != "user"
+            ])
+            updated_identity = lock_identity_after_threshold(
+                identity=updated_identity,
+                turn_count=scammer_turn_count,
+                persona_category=chosen_persona,
+            )
+        else:
+            updated_identity = existing_identity
+
+        # Build persona prompt with detected identity
+        persona_prompt = get_persona_prompt(chosen_persona, response_lang, identity=updated_identity)
+
+        # Persist language + persona + identity to in-memory session
         session_manager.update_session(
             request.sessionId,
             detected_language=detected_lang,
             response_language=response_lang,
             persona_selected=chosen_persona,
+            detected_identity=updated_identity,
         )
 
         logger.info(
-            f"Language: {detected_lang}, Persona: {chosen_persona} - "
+            f"Language: {detected_lang}, Persona: {chosen_persona}, "
+            f"Identity: name={updated_identity.name}, gender={updated_identity.gender}, "
+            f"age_group={updated_identity.age_group}, locked={updated_identity.locked} - "
             f"Session: {request.sessionId}"
         )
 
@@ -229,6 +281,7 @@ async def handle_conversation(
             repeat_matches=repeat_matches_for_prompt,
             persona_prompt=persona_prompt,
             language=response_lang,
+            identity=updated_identity,
         )
 
         # Add agent's response to session history
@@ -355,6 +408,17 @@ async def handle_conversation(
                 response_language=session.response_language,
                 persona_selected=session.persona_selected,
                 persona_switch_history=session.persona_switch_history,
+                rule_score=session.rule_score,
+                ml_score=session.ml_score,
+                scam_type=session.scam_type,
+                detection_method=session.detection_method,
+                detected_indicators=session.detected_indicators,
+                detected_identity_dict={
+                    "name": session.detected_identity.name,
+                    "gender": session.detected_identity.gender,
+                    "ageGroup": session.detected_identity.age_group,
+                    "locked": session.detected_identity.locked,
+                },
             )
         except Exception as db_err:
             logger.error(f"MongoDB persistence failed (non-blocking): {db_err}")
