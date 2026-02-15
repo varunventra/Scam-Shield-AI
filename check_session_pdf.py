@@ -96,7 +96,7 @@ async def check_session(session_id: str):
     print(f"Case ID: {pdf_case_id}")
     print(f"\n[OK] The PDF download endpoint SHOULD work for this session!")
     print("\nDownload URL:")
-    print(f"https://scambot-honeypot.onrender.com/admin/report/{session_id}?admin_key=honeypot123")
+    print(f"https://scambot-honeypot.onrender.com/api/v1/admin/report/{session_id}?admin_key=honeypot123")
     print("=" * 70)
 
 

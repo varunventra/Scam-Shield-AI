@@ -340,17 +340,30 @@ async def handle_conversation(
                 logger.error(f"Repeat detection failed (non-blocking): {exc}")
 
             # Generate forensic PDF report and store in MongoDB
+            # ONLY when conversation ends (to capture complete conversation)
             pdf_file_id = None
             pdf_case_id = None
             pdf_generated = False
             pdf_generated_at = None
 
-            try:
-                # Check if PDF already generated for this session
-                pdf_exists = await check_pdf_exists(request.sessionId)
+            if should_end:
+                try:
+                    # Check if PDF already exists
+                    pdf_exists = await check_pdf_exists(request.sessionId)
 
-                if not pdf_exists:
-                    # Generate PDF as bytes
+                    # Generate or regenerate PDF with full conversation
+                    if not pdf_exists:
+                        logger.info(f"Conversation ending - generating complete PDF for session: {request.sessionId}")
+                    else:
+                        logger.info(f"Conversation ending - regenerating PDF with full conversation for session: {request.sessionId}")
+                        # Delete old PDF to replace with complete one
+                        from app.storage.mongodb import get_session_doc
+                        old_doc = await get_session_doc(request.sessionId)
+                        if old_doc and old_doc.get("pdfReportFileId"):
+                            from app.storage.pdf_storage import delete_pdf
+                            await delete_pdf(old_doc["pdfReportFileId"])
+
+                    # Generate PDF as bytes with FULL conversation
                     pdf_bytes = forensic_reporter.generate_forensic_report_bytes(
                         session_id=request.sessionId,
                         extracted_intelligence=intelligence,
@@ -373,6 +386,7 @@ async def handle_conversation(
                                 "scamDetected": session.scam_detected,
                                 "totalMessages": message_count,
                                 "scamType": session.scam_type,
+                                "conversationEnded": True,
                             }
                         )
 
@@ -382,14 +396,12 @@ async def handle_conversation(
                             pdf_generated = True
                             pdf_generated_at = datetime.now(timezone.utc)
                             logger.info(
-                                f"Forensic PDF stored in MongoDB - Session: {request.sessionId}, "
-                                f"FileID: {file_id}, Case: {case_id}"
+                                f"Complete forensic PDF stored in MongoDB - Session: {request.sessionId}, "
+                                f"FileID: {file_id}, Case: {case_id}, Messages: {message_count}"
                             )
-                else:
-                    logger.info(f"PDF already exists for session: {request.sessionId}, skipping generation")
 
-            except Exception as report_err:
-                logger.error(f"Forensic report generation/storage failed (non-blocking): {report_err}")
+                except Exception as report_err:
+                    logger.error(f"Forensic report generation/storage failed (non-blocking): {report_err}")
 
 
         # -----------------------------------------------------------------
