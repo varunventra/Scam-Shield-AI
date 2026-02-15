@@ -331,6 +331,20 @@ async def upsert_session(
         if pdf_report_case_id:
             update_doc["$set"]["pdfReportCaseId"] = pdf_report_case_id
 
+        # Build clickable PDF download URL
+        import os
+        base = (
+            settings.base_url
+            or os.environ.get("RENDER_EXTERNAL_URL", "")
+            or f"http://localhost:{settings.port}"
+        )
+        base = base.rstrip("/")
+        pdf_url = (
+            f"{base}/api/v1/admin/report/{session_id}"
+            f"?admin_key={settings.admin_api_key}"
+        )
+        update_doc["$set"]["pdfReportUrl"] = pdf_url
+
     try:
         await col.update_one(
             {"sessionId": session_id},

@@ -33,6 +33,9 @@ class Settings(BaseSettings):
         env="GUVI_CALLBACK_URL"
     )
 
+    # Base URL for generating clickable links (auto-detected on Render)
+    base_url: str = Field(default="", env="BASE_URL")
+
     # Application Settings
     debug: bool = Field(default=False, env="DEBUG")
     log_level: str = Field(default="INFO", env="LOG_LEVEL")
