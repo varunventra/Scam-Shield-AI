@@ -161,12 +161,13 @@ async def retrieve_pdf_by_session(session_id: str) -> Optional[tuple[bytes, dict
         cursor = bucket.find({"metadata.sessionId": session_id})
 
         # Get first match
-        grid_out = await cursor.to_list(length=1)
-        if not grid_out:
+        files = await cursor.to_list(length=1)
+        if not files:
             logger.warning(f"No PDF found for session: {session_id}")
             return None
 
-        file_id = grid_out[0]._id
+        # Extract file_id from the GridFS file document
+        file_id = files[0]["_id"]
 
         # Retrieve the file
         return await retrieve_pdf(str(file_id))
