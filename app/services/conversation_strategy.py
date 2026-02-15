@@ -406,12 +406,13 @@ def build_extraction_strategy_prompt(
             "",
         ])
 
-    # Language-specific guidance
+    # Language-specific guidance (EVERY language gets an explicit block)
     if language == "hindi":
         lines.extend([
             "🗣️ HINDI RESPONSE REQUIRED:",
             "  - Use natural Hinglish or Devanagari",
             '  - Examples: "Aap ka naam kya hai?", "UPI ID bhej do"',
+            "  - Do NOT reply in English",
             "",
         ])
     elif language == "telugu":
@@ -419,6 +420,15 @@ def build_extraction_strategy_prompt(
             "🗣️ TELUGU RESPONSE REQUIRED:",
             "  - Use Telugu script or transliteration",
             '  - Examples: "Mi peru enti?", "UPI ID pampandi"',
+            "  - Do NOT reply in English",
+            "",
+        ])
+    else:
+        lines.extend([
+            "🗣️ ENGLISH RESPONSE REQUIRED:",
+            "  - The scammer's current message is in English",
+            "  - You MUST reply in English even if earlier messages were in Hindi/Telugu",
+            "  - Use natural Indian English",
             "",
         ])
 

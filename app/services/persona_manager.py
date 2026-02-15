@@ -523,22 +523,37 @@ def get_persona_prompt(
 
 
 def get_language_instruction(language: str) -> str:
-    """Return a prompt instruction telling the agent which language to use."""
+    """
+    Return a prompt instruction telling the agent which language to use.
+
+    IMPORTANT: Every language gets an explicit instruction, including English.
+    This prevents the model from getting "stuck" in a previous language when
+    the scammer switches mid-conversation (e.g. Hindi → English).
+    """
     if language == "hindi":
         return (
-            "\n\nLANGUAGE INSTRUCTION: The scammer is writing in Hindi. "
-            "You MUST reply in Hindi (Devanagari script or natural Hinglish). "
-            "Keep the same persona character but speak Hindi naturally. "
-            "Mix English words where natural (like 'OTP', 'bank', 'account'). "
+            "\n\n⚠️ LANGUAGE INSTRUCTION (OVERRIDE PREVIOUS MESSAGES):\n"
+            "The scammer's CURRENT message is in Hindi.\n"
+            "You MUST reply in Hindi (Devanagari script or natural Hinglish).\n"
+            "Keep the same persona character but speak Hindi naturally.\n"
+            "Mix English words where natural (like 'OTP', 'bank', 'account').\n"
             "Do NOT reply in pure English."
         )
     elif language == "telugu":
         return (
-            "\n\nLANGUAGE INSTRUCTION: The scammer is writing in Telugu. "
-            "You MUST reply in Telugu (Telugu script or natural Telugu-English mix). "
-            "Keep the same persona character but speak Telugu naturally. "
-            "Mix English words where natural (like 'OTP', 'bank', 'account'). "
+            "\n\n⚠️ LANGUAGE INSTRUCTION (OVERRIDE PREVIOUS MESSAGES):\n"
+            "The scammer's CURRENT message is in Telugu.\n"
+            "You MUST reply in Telugu (Telugu script or natural Telugu-English mix).\n"
+            "Keep the same persona character but speak Telugu naturally.\n"
+            "Mix English words where natural (like 'OTP', 'bank', 'account').\n"
             "Do NOT reply in pure English."
         )
     else:
-        return ""
+        return (
+            "\n\n⚠️ LANGUAGE INSTRUCTION (OVERRIDE PREVIOUS MESSAGES):\n"
+            "The scammer's CURRENT message is in English.\n"
+            "You MUST reply in English.\n"
+            "Even if previous messages in this conversation were in Hindi or Telugu, "
+            "the scammer has switched to English — you MUST switch too.\n"
+            "Do NOT reply in Hindi or Telugu. Reply in natural Indian English only."
+        )
