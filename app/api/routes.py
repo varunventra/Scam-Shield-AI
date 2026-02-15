@@ -340,30 +340,52 @@ async def handle_conversation(
                 logger.error(f"Repeat detection failed (non-blocking): {exc}")
 
             # Generate forensic PDF report and store in MongoDB
-            # ONLY when conversation ends (to capture complete conversation)
+            # Strategy: Generate at message 3, then update every 3 messages (6, 9, 12, etc.)
             pdf_file_id = None
             pdf_case_id = None
             pdf_generated = False
             pdf_generated_at = None
 
-            if should_end:
+            # Determine if we should generate/update PDF
+            # Generate: First time at message 3
+            # Update: Every 3 messages after that (6, 9, 12, 15, etc.)
+            should_generate_pdf = (message_count == 3)  # First generation
+            should_update_pdf = (message_count > 3 and message_count % 3 == 0)  # Periodic updates
+
+            if should_generate_pdf or should_update_pdf:
                 try:
                     # Check if PDF already exists
                     pdf_exists = await check_pdf_exists(request.sessionId)
 
-                    # Generate or regenerate PDF with full conversation
-                    if not pdf_exists:
-                        logger.info(f"Conversation ending - generating complete PDF for session: {request.sessionId}")
-                    else:
-                        logger.info(f"Conversation ending - regenerating PDF with full conversation for session: {request.sessionId}")
-                        # Delete old PDF to replace with complete one
+                    if should_generate_pdf and not pdf_exists:
+                        logger.info(
+                            f"Generating initial PDF for session {request.sessionId} "
+                            f"(Message count: {message_count})"
+                        )
+                    elif should_update_pdf and pdf_exists:
+                        logger.info(
+                            f"Updating PDF for session {request.sessionId} "
+                            f"(Message count: {message_count}) - Deleting old PDF"
+                        )
+                        # Delete old PDF before creating new one
                         from app.storage.mongodb import get_session_doc
                         old_doc = await get_session_doc(request.sessionId)
                         if old_doc and old_doc.get("pdfReportFileId"):
                             from app.storage.pdf_storage import delete_pdf
-                            await delete_pdf(old_doc["pdfReportFileId"])
+                            deleted = await delete_pdf(old_doc["pdfReportFileId"])
+                            if deleted:
+                                logger.info(
+                                    f"Old PDF deleted (FileID: {old_doc['pdfReportFileId']}) - "
+                                    f"Generating updated PDF with {message_count} messages"
+                                )
+                    elif should_update_pdf and not pdf_exists:
+                        # PDF should exist but doesn't - generate it anyway
+                        logger.warning(
+                            f"PDF should exist but not found for session {request.sessionId} - "
+                            f"Generating new PDF"
+                        )
 
-                    # Generate PDF as bytes with FULL conversation
+                    # Generate PDF bytes with current conversation state
                     pdf_bytes = forensic_reporter.generate_forensic_report_bytes(
                         session_id=request.sessionId,
                         extracted_intelligence=intelligence,
@@ -374,10 +396,10 @@ async def handle_conversation(
                     )
 
                     if pdf_bytes:
-                        # Generate case ID
+                        # Generate case ID (consistent for same session)
                         case_id = forensic_reporter._generate_case_id(request.sessionId)
 
-                        # Store in MongoDB GridFS
+                        # Store in MongoDB GridFS (replaces old one)
                         file_id = await store_pdf(
                             session_id=request.sessionId,
                             pdf_bytes=pdf_bytes,
@@ -386,7 +408,8 @@ async def handle_conversation(
                                 "scamDetected": session.scam_detected,
                                 "totalMessages": message_count,
                                 "scamType": session.scam_type,
-                                "conversationEnded": True,
+                                "lastUpdated": datetime.now(timezone.utc).isoformat(),
+                                "isUpdate": pdf_exists,
                             }
                         )
 
@@ -395,13 +418,21 @@ async def handle_conversation(
                             pdf_case_id = case_id
                             pdf_generated = True
                             pdf_generated_at = datetime.now(timezone.utc)
+
+                            action = "updated" if pdf_exists else "generated"
                             logger.info(
-                                f"Complete forensic PDF stored in MongoDB - Session: {request.sessionId}, "
-                                f"FileID: {file_id}, Case: {case_id}, Messages: {message_count}"
+                                f"Forensic PDF {action} successfully - "
+                                f"Session: {request.sessionId}, "
+                                f"FileID: {file_id}, "
+                                f"Case: {case_id}, "
+                                f"Messages: {message_count}"
                             )
 
                 except Exception as report_err:
-                    logger.error(f"Forensic report generation/storage failed (non-blocking): {report_err}")
+                    logger.error(
+                        f"Forensic report generation/update failed (non-blocking) - "
+                        f"Session: {request.sessionId}, Error: {report_err}"
+                    )
 
 
         # -----------------------------------------------------------------
