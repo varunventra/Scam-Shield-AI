@@ -623,14 +623,29 @@ async def admin_db_status(admin_key: str = Depends(verify_admin_key)):
 @router.get("/admin/report/{session_id}")
 async def download_forensic_report(
     session_id: str,
-    admin_key: str = Depends(verify_admin_key)
+    admin_key: Optional[str] = Query(None, description="Admin API key (can also use x-admin-key header)")
 ):
     """
     Download forensic PDF report for a session.
 
     Returns the PDF file which can be opened directly in the browser.
-    Requires admin authentication.
+    Requires admin authentication via query parameter or x-admin-key header.
     """
+    # Verify admin key from query parameter
+    from app.core.config import settings
+
+    if not admin_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing admin API key. Provide via ?admin_key= query parameter"
+        )
+
+    if admin_key != settings.admin_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid admin API key"
+        )
+
     # Validate session ID format
     if not validate_session_id(session_id):
         raise HTTPException(
