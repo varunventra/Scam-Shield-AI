@@ -4,9 +4,11 @@ API routes for the Scambot Honeypot system.
 import re
 import time
 from datetime import datetime, timezone
+from io import BytesIO
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 
 from app.core.security import verify_api_key, verify_admin_key
 from app.core.logging import logger
@@ -28,6 +30,7 @@ from app.storage.mongodb import (
     search_sessions,
     upsert_session,
 )
+from app.storage.pdf_storage import store_pdf, retrieve_pdf_by_session, check_pdf_exists
 from app.utils import validate_session_id
 
 # Create router
@@ -336,20 +339,57 @@ async def handle_conversation(
             except Exception as exc:
                 logger.error(f"Repeat detection failed (non-blocking): {exc}")
 
-            # Generate forensic PDF report
+            # Generate forensic PDF report and store in MongoDB
+            pdf_file_id = None
+            pdf_case_id = None
+            pdf_generated = False
+            pdf_generated_at = None
+
             try:
-                report_path = forensic_reporter.generate_forensic_report(
-                    session_id=request.sessionId,
-                    extracted_intelligence=intelligence,
-                    conversation_history=session.messages,
-                    agent_notes=agent_notes,
-                    scam_detected=session.scam_detected,
-                    total_messages=message_count
-                )
-                if report_path:
-                    logger.info(f"Forensic PDF report saved: {report_path}")
+                # Check if PDF already generated for this session
+                pdf_exists = await check_pdf_exists(request.sessionId)
+
+                if not pdf_exists:
+                    # Generate PDF as bytes
+                    pdf_bytes = forensic_reporter.generate_forensic_report_bytes(
+                        session_id=request.sessionId,
+                        extracted_intelligence=intelligence,
+                        conversation_history=session.messages,
+                        agent_notes=agent_notes,
+                        scam_detected=session.scam_detected,
+                        total_messages=message_count
+                    )
+
+                    if pdf_bytes:
+                        # Generate case ID
+                        case_id = forensic_reporter._generate_case_id(request.sessionId)
+
+                        # Store in MongoDB GridFS
+                        file_id = await store_pdf(
+                            session_id=request.sessionId,
+                            pdf_bytes=pdf_bytes,
+                            case_id=case_id,
+                            metadata={
+                                "scamDetected": session.scam_detected,
+                                "totalMessages": message_count,
+                                "scamType": session.scam_type,
+                            }
+                        )
+
+                        if file_id:
+                            pdf_file_id = file_id
+                            pdf_case_id = case_id
+                            pdf_generated = True
+                            pdf_generated_at = datetime.now(timezone.utc)
+                            logger.info(
+                                f"Forensic PDF stored in MongoDB - Session: {request.sessionId}, "
+                                f"FileID: {file_id}, Case: {case_id}"
+                            )
+                else:
+                    logger.info(f"PDF already exists for session: {request.sessionId}, skipping generation")
+
             except Exception as report_err:
-                logger.error(f"Forensic report generation failed (non-blocking): {report_err}")
+                logger.error(f"Forensic report generation/storage failed (non-blocking): {report_err}")
 
 
         # -----------------------------------------------------------------
@@ -391,7 +431,7 @@ async def handle_conversation(
 
 
         # -----------------------------------------------------------------
-        # PERSIST TO MONGODB (non-blocking – DB failure never breaks API)
+        # PERSIST TO MONGODB (non-blocking – DB failure never breaks API with PDF metadata)
         # -----------------------------------------------------------------
         try:
             intel_dict_for_db = (
@@ -439,6 +479,10 @@ async def handle_conversation(
                     "ageGroup": session.detected_identity.age_group,
                     "locked": session.detected_identity.locked,
                 },
+                pdf_report_generated=pdf_generated if 'pdf_generated' in locals() else False,
+                pdf_report_file_id=pdf_file_id if 'pdf_file_id' in locals() else None,
+                pdf_report_generated_at=pdf_generated_at if 'pdf_generated_at' in locals() else None,
+                pdf_report_case_id=pdf_case_id if 'pdf_case_id' in locals() else None,
             )
         except Exception as db_err:
             logger.error(f"MongoDB persistence failed (non-blocking): {db_err}")
@@ -574,3 +618,42 @@ async def admin_db_status(admin_key: str = Depends(verify_admin_key)):
         result["error"] = f"{type(exc).__name__}: {str(exc)}"
 
     return result
+
+
+@router.get("/admin/report/{session_id}")
+async def download_forensic_report(
+    session_id: str,
+    admin_key: str = Depends(verify_admin_key)
+):
+    """
+    Download forensic PDF report for a session.
+
+    Returns the PDF file which can be opened directly in the browser.
+    Requires admin authentication.
+    """
+    # Validate session ID format
+    if not validate_session_id(session_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid session ID format"
+        )
+
+    # Retrieve PDF from MongoDB GridFS
+    result = await retrieve_pdf_by_session(session_id)
+
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No PDF report found for session: {session_id}"
+        )
+
+    pdf_bytes, metadata = result
+
+    # Return PDF with inline disposition so it opens in browser
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{metadata["filename"]}"'
+        }
+    )

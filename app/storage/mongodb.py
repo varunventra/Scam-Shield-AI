@@ -256,6 +256,10 @@ async def upsert_session(
     detection_method: str = "none",
     detected_indicators: Optional[List[str]] = None,
     detected_identity_dict: Optional[Dict[str, Any]] = None,
+    pdf_report_generated: bool = False,
+    pdf_report_file_id: Optional[str] = None,
+    pdf_report_generated_at: Optional[datetime] = None,
+    pdf_report_case_id: Optional[str] = None,
 ) -> bool:
     """
     Upsert the full session record into MongoDB.
@@ -318,6 +322,14 @@ async def upsert_session(
     else:
         # Don't overwrite an existing True with False
         update_doc["$set"].setdefault("callbackSent", False)
+
+    # Add PDF report fields if provided
+    if pdf_report_generated:
+        update_doc["$set"]["pdfReportGenerated"] = True
+        update_doc["$set"]["pdfReportFileId"] = pdf_report_file_id
+        update_doc["$set"]["pdfReportGeneratedAt"] = pdf_report_generated_at or now
+        if pdf_report_case_id:
+            update_doc["$set"]["pdfReportCaseId"] = pdf_report_case_id
 
     try:
         await col.update_one(

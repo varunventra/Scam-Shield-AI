@@ -92,6 +92,7 @@ class ForensicReporter:
     ) -> Optional[str]:
         """
         Generate a comprehensive forensic investigation PDF report.
+        DEPRECATED: Use generate_forensic_report_bytes() for MongoDB storage.
 
         Args:
             session_id: The session identifier (used as Case ID).
@@ -142,6 +143,67 @@ class ForensicReporter:
 
         except Exception as e:
             logger.error(f"Failed to generate forensic report - Session: {session_id}, Error: {e}")
+            return None
+
+    def generate_forensic_report_bytes(
+        self,
+        session_id: str,
+        extracted_intelligence: ExtractedIntelligence,
+        conversation_history: List[Message],
+        agent_notes: str = "",
+        scam_detected: bool = True,
+        total_messages: int = 0
+    ) -> Optional[bytes]:
+        """
+        Generate a forensic PDF report and return as bytes for MongoDB storage.
+
+        Args:
+            session_id: The session identifier (used as Case ID).
+            extracted_intelligence: Intelligence data extracted from conversation.
+            conversation_history: Full list of Message objects from the session.
+            agent_notes: Summary notes about the scam interaction.
+            scam_detected: Whether a scam was detected.
+            total_messages: Total messages exchanged.
+
+        Returns:
+            PDF content as bytes, or None on failure.
+        """
+        try:
+            case_id = self._generate_case_id(session_id)
+            generation_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
+            msg_count = total_messages or len(conversation_history)
+
+            pdf = ForensicPDF(orientation="P", unit="mm", format="A4")
+            pdf.alias_nb_pages()
+            pdf.set_auto_page_break(auto=True, margin=25)
+            pdf.add_page()
+
+            # ── HEADER BANNER ──
+            self._render_header(pdf, case_id, generation_date)
+
+            # ── EXECUTIVE SUMMARY ──
+            self._render_executive_summary(pdf, agent_notes, scam_detected, msg_count, extracted_intelligence)
+
+            # ── PRIMARY SUSPECT DATA TABLE ──
+            self._render_suspect_table(pdf, extracted_intelligence)
+
+            # ── BEHAVIORAL MARKERS ──
+            self._render_behavioral_markers(pdf, extracted_intelligence)
+
+            # ── EVIDENCE LOG ──
+            self._render_evidence_log(pdf, conversation_history)
+
+            # ── FORENSIC FOOTER ──
+            self._render_forensic_footer(pdf)
+
+            # Generate PDF as bytes
+            pdf_bytes = pdf.output()
+
+            logger.info(f"Forensic report generated as bytes (Case: {case_id}, Size: {len(pdf_bytes)} bytes)")
+            return pdf_bytes
+
+        except Exception as e:
+            logger.error(f"Failed to generate forensic report bytes - Session: {session_id}, Error: {e}")
             return None
 
     # ──────────────────────────────────────────────
