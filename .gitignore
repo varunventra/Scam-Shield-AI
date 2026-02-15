@@ -59,3 +59,10 @@ htmlcov/
 .dockerignore
 
 .claude/
+
+# Test/check scripts with potential hardcoded values
+check_session_pdf.py
+test_pdf_storage.py
+
+# Files containing sensitive context
+PROJECT_FULL_CONTEXT.md

@@ -9,7 +9,7 @@ import os
 
 # Configuration - Set your Render URL here
 BASE_URL = os.getenv("TEST_BASE_URL", "https://your-service.onrender.com")
-API_KEY = os.getenv("TEST_API_KEY", "J-2Qw-PaYnlQeIOQOMPGO1cuwv1cYxf5MRIrJrnLQAM")
+API_KEY = os.getenv("TEST_API_KEY", "")
 
 # Timeout for requests (in seconds)
 TIMEOUT = 30
