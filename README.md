@@ -1,99 +1,149 @@
-# Scambot Honeypot API
+# ScamShield - Agentic Honeypot for Scam Detection & Intelligence Extraction
 
-An enterprise-level AI-powered honeypot system that detects scam messages, autonomously engages scammers in human-like conversations, and extracts actionable intelligence.
+An AI-powered honeypot system that detects scam messages, autonomously engages scammers using dynamic personas, and extracts actionable intelligence (phone numbers, bank accounts, UPI IDs, phishing links, emails) in real time.
 
-## 🚀 Quick Start - Deploy to Production
+Built for the **India AI Impact Buildathon** hackathon.
 
-**Deploy in 10 minutes:** See [QUICKSTART_RENDER.md](QUICKSTART_RENDER.md)
+---
 
-**Full deployment guide:** See [RENDER_DEPLOYMENT_GUIDE.md](RENDER_DEPLOYMENT_GUIDE.md)
-
-**Production summary:** See [PRODUCTION_READY_SUMMARY.md](PRODUCTION_READY_SUMMARY.md)
-
-## Features
-
-- **Scam Detection**: AI-powered detection of various scam types (bank fraud, UPI fraud, phishing, fake offers)
-- **Autonomous AI Agent**: Maintains believable human persona to engage scammers
-- **Multi-turn Conversations**: Handles complex conversation flows
-- **Intelligence Extraction**: Extracts bank accounts, UPI IDs, phone numbers, phishing links, and suspicious keywords
-- **API-First Design**: RESTful API with authentication
-- **Production-Ready**: Configured for Render deployment with 24/7 uptime
-
-## Architecture
+## How It Works
 
 ```
-scambot-honeypot/
+Scammer Message ──> Scam Detection (Rules + ML + LLM) ──> Persona Selection
+                                                              │
+                    Intelligence Extraction <── AI Agent <─────┘
+                           │                   (GPT-4o)
+                           v
+              MongoDB + PDF Forensic Report + Callback
+```
+
+1. **Scam Detection** - 3-tier hybrid system (rule engine + trained ML model + LLM fallback) classifies incoming messages with confidence scoring
+2. **Persona Selection** - Picks one of 4 victim personas (grandmother, student, professional, shopkeeper) based on scam type and scammer cues
+3. **Identity Mirroring** - Detects and locks the identity the scammer assumes (name, gender, age) to stay consistent
+4. **Strategic Engagement** - AI agent uses a 3-phase extraction strategy to naturally elicit phone numbers, UPI IDs, bank accounts, and phishing links from the scammer
+5. **Intelligence Extraction** - Regex + NLP pipeline extracts structured data from every message
+6. **Multilingual Support** - Detects and mirrors English, Hindi, and Telugu automatically
+7. **Forensic Reporting** - Auto-generates PDF reports stored in MongoDB GridFS
+8. **Repeat Scammer Detection** - Cross-references extracted intelligence against previous sessions
+
+---
+
+## Tech Stack
+
+| Component | Technology |
+|-----------|-----------|
+| Framework | FastAPI (Python 3.11+) |
+| AI/LLM | OpenAI GPT-4o |
+| ML Model | scikit-learn (TF-IDF + Logistic Regression, 100% test accuracy) |
+| Database | MongoDB Atlas (async via Motor) |
+| PDF Reports | fpdf2 (in-memory generation, GridFS storage) |
+| Language Detection | Unicode script analysis + langdetect |
+| Deployment | Render (free tier) |
+
+---
+
+## Project Structure
+
+```
+honeypot/
 ├── app/
-│   ├── api/              # API routes and endpoints
-│   ├── core/             # Core configuration, logging, security
-│   ├── models/           # Pydantic data models
-│   ├── services/         # Business logic services
-│   ├── storage/          # Session management
-│   └── utils/            # Helper utilities
-├── tests/                # Test suite
-├── Dockerfile            # Docker configuration
-├── docker-compose.yml    # Docker Compose setup
-└── requirements.txt      # Python dependencies
+│   ├── api/
+│   │   └── routes.py              # API endpoints (conversation, admin, PDF download)
+│   ├── core/
+│   │   ├── config.py              # Environment config (Pydantic Settings)
+│   │   ├── logging.py             # Structured logging
+│   │   └── security.py            # API key authentication
+│   ├── models/
+│   │   ├── requests.py            # Request schemas (Message, ConversationRequest)
+│   │   └── responses.py           # Response schemas (ExtractedIntelligence, FinalResultPayload)
+│   ├── services/
+│   │   ├── ai_agent.py            # GPT-4o conversation engine with persona prompts
+│   │   ├── callback_handler.py    # Evaluation callback submission
+│   │   ├── conversation_strategy.py # 3-phase extraction strategy engine
+│   │   ├── forensic_reporter.py   # PDF forensic report generator
+│   │   ├── intelligence_extractor.py # Regex + NLP intelligence extraction
+│   │   ├── language_detector.py   # Hindi/Telugu/English detection
+│   │   ├── ml_detector.py         # Trained ML scam classifier
+│   │   ├── persona_manager.py     # 4 dynamic victim personas
+│   │   └── scam_detector.py       # Hybrid detection orchestrator
+│   ├── storage/
+│   │   ├── mongodb.py             # MongoDB session persistence
+│   │   ├── pdf_storage.py         # GridFS PDF storage
+│   │   └── session_manager.py     # In-memory session state
+│   └── main.py                    # FastAPI app entry point
+├── ml/
+│   ├── models/                    # Trained model artifacts (.pkl)
+│   ├── train_model.py             # Model training script
+│   └── train_model_optimized.py   # Optimized training with GridSearchCV
+├── data/
+│   ├── scam_dataset.csv           # Base training dataset
+│   └── scam_dataset_enhanced.csv  # Augmented dataset (1600+ samples)
+├── tests/                         # Test suite
+├── demo_conversation.py           # Automated demo script (9-message scenario)
+├── render.yaml                    # Render deployment config
+├── requirements.txt               # Python dependencies
+└── .env.example                   # Environment variable template
 ```
 
-## Prerequisites
+---
+
+## Setup Instructions
+
+### Prerequisites
 
 - Python 3.11+
-- OpenAI API key with credits
-- GitHub account (for deployment)
-- Render account (free tier)
-- UptimeRobot account (free tier)
+- OpenAI API key (with GPT-4o access)
+- MongoDB Atlas cluster (free tier works)
 
-## 🎯 Production Deployment
-
-This application is production-ready and configured for deployment on Render (Free Tier).
-
-### Quick Deploy (10 minutes)
-1. Run `.\cleanup_old_files.bat` to remove old files
-2. Push code to GitHub
-3. Follow [QUICKSTART_RENDER.md](QUICKSTART_RENDER.md)
-4. Set up UptimeRobot using [UPTIMEROBOT_SETUP.md](UPTIMEROBOT_SETUP.md)
-
-### Local Development
+### 1. Clone and Install
 
 ```bash
-# Create virtual environment
-python -m venv venv
-venv\Scripts\activate  # On Windows
-source venv/bin/activate  # On Unix/Mac
-
-# Install dependencies
+git clone https://github.com/varunventra/honeypot.git
+cd honeypot
 pip install -r requirements.txt
-
-# Create .env file
-cp .env.example .env
-# Edit .env with your API keys
-
-# Run the application
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-## API Usage
-
-### Base URL
-```
-http://localhost:8000/api/v1
-```
-
-### Authentication
-All requests require `x-api-key` header:
+### 2. Configure Environment
 
 ```bash
-x-api-key: your_secret_api_key_here
+cp .env.example .env
 ```
 
-### Endpoints
+Edit `.env` with your actual keys:
 
-#### 1. Handle Conversation
+```env
+API_KEY=your-api-key-here
+OPENAI_API_KEY=sk-your-openai-key
+MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/?retryWrites=true&w=majority
+ADMIN_API_KEY=your-admin-key
+```
 
-**POST** `/api/v1/conversation`
+### 3. Run Locally
 
-Send a message to the honeypot system.
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### 4. Deploy to Render
+
+The repo includes `render.yaml` for one-click deployment:
+
+1. Push to GitHub
+2. Connect repo to Render
+3. Set `API_KEY`, `OPENAI_API_KEY`, `MONGODB_URI` in Render environment
+4. Deploy
+
+---
+
+## API Endpoint
+
+### POST `/api/v1/conversation`
+
+**Headers:**
+```
+Content-Type: application/json
+x-api-key: your-api-key
+```
 
 **Request:**
 ```json
@@ -101,8 +151,8 @@ Send a message to the honeypot system.
   "sessionId": "unique-session-id",
   "message": {
     "sender": "scammer",
-    "text": "Your bank account will be blocked. Verify immediately.",
-    "timestamp": 1770005528731
+    "text": "URGENT: Your SBI account has been compromised. Share OTP immediately.",
+    "timestamp": 1739600000000
   },
   "conversationHistory": [],
   "metadata": {
@@ -117,177 +167,129 @@ Send a message to the honeypot system.
 ```json
 {
   "status": "success",
-  "reply": "Why is my account being blocked? This is concerning."
+  "reply": "oh no is my money safe? what number can i call you back on?"
 }
 ```
 
-#### 2. Health Check
+The `timestamp` field accepts both epoch milliseconds (int) and ISO-8601 strings.
 
-**GET** `/health`
+### GET `/api/v1/health`
 
-Check API health status.
+Health check endpoint (no auth required).
 
-**Response:**
+---
+
+## Approach
+
+### Scam Detection
+
+Three detection layers run in parallel and combine scores:
+
+1. **Rule Engine** - 40+ keyword/pattern rules with weighted scoring for urgency, threats, credential requests, payment demands, and authority impersonation
+2. **ML Classifier** - TF-IDF vectorizer + Logistic Regression trained on 1600+ labeled samples (scam/legitimate). Achieves 100% accuracy on test set with optimized hyperparameters
+3. **LLM Analysis** - GPT-4o as final arbiter for ambiguous cases
+
+Detection is **fail-open**: if all detectors fail, the honeypot still engages (it's a honeypot, not a filter).
+
+### Intelligence Extraction
+
+Extracts from every message using regex patterns:
+
+| Data Type | Pattern |
+|-----------|---------|
+| Phone Numbers | Indian mobile (10-digit, +91 prefix variants) |
+| Bank Accounts | 11-18 digit numbers |
+| UPI IDs | `user@provider` format with known UPI providers |
+| Phishing Links | HTTP/HTTPS URLs |
+| Email Addresses | Standard email regex |
+| Amounts | Rs./INR patterns |
+| Employee IDs | Reference/ticket number patterns |
+
+Phone numbers are stored in multiple formats (`+91-XXXXXXXXXX`, `+91XXXXXXXXXX`, `XXXXXXXXXX`) to maximize matching against evaluation criteria.
+
+### Conversation Strategy
+
+The AI agent uses a turn-aware 3-phase strategy optimized for 10-turn conversations:
+
+- **Phase 1 (Turn 1):** Show fear + immediately ask a question ("oh god is my money safe? what number can i call you on?")
+- **Phase 2 (Turns 2-4):** Active extraction - every response ends with a direct question for missing intelligence
+- **Phase 3 (Turns 5+):** Deep extraction - persistent, compliance-based questioning
+
+Authority-specific tactics adapt based on detected scam type (bank, police, job, lottery, delivery, phishing).
+
+### Dynamic Personas
+
+4 victim personas, each with distinct speech patterns:
+
+| Persona | Profile | Speech Style |
+|---------|---------|-------------|
+| Grandmother | Elderly, lives alone, pension income | "beta help me", "my grandson helps with phone" |
+| Student | College student, part-time job | "bro what is this", casual slang |
+| Professional | Working adult, busy schedule | "I'm in a meeting", formal but trusting |
+| Shopkeeper | Small business owner | "I have customers", practical concerns |
+
+Persona selection is automatic based on scam type and scammer cues. Identity (name, gender, age) is mirrored from scammer assumptions and locked after 3 turns.
+
+---
+
+## Final Output Structure
+
+After the conversation, the system submits a final output via callback:
+
 ```json
 {
-  "status": "healthy",
-  "service": "scambot-honeypot",
-  "active_sessions": 5
+  "sessionId": "abc123",
+  "status": "completed",
+  "scamDetected": true,
+  "totalMessagesExchanged": 10,
+  "extractedIntelligence": {
+    "phoneNumbers": ["+91-9876543210"],
+    "bankAccounts": ["1234567890123456"],
+    "upiIds": ["scammer.fraud@fakebank"],
+    "phishingLinks": ["http://fake-site.com/verify"],
+    "emailAddresses": ["scammer@fake.com"]
+  },
+  "engagementMetrics": {
+    "totalMessagesExchanged": 10,
+    "engagementDurationSeconds": 120
+  },
+  "agentNotes": "Successfully extracted: target bank account, normalized phone number, baited payment credentials. Tactics: urgency, threats. Impersonating: SBI."
 }
-```
-
-#### 3. Cleanup Sessions (Admin)
-
-**POST** `/api/v1/admin/cleanup`
-
-Remove expired sessions.
-
-**Response:**
-```json
-{
-  "status": "success",
-  "removed_sessions": 3,
-  "active_sessions": 2
-}
-```
-
-## Configuration
-
-Key environment variables:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `API_KEY` | API authentication key | Required |
-| `OPENAI_API_KEY` | OpenAI API key | Required |
-| `OPENAI_MODEL` | OpenAI model to use | `gpt-4o` |
-| `SCAM_CONFIDENCE_THRESHOLD` | Minimum confidence to activate agent | `0.7` |
-| `MAX_CONVERSATION_TURNS` | Maximum messages per conversation | `20` |
-| `AGENT_NAME` | AI agent persona name | `Rahul` |
-| `AGENT_AGE` | AI agent persona age | `28` |
-| `AGENT_OCCUPATION` | AI agent persona occupation | `Software Engineer` |
-
-## How It Works
-
-1. **Message Reception**: Platform sends suspected scam message
-2. **Scam Detection**: AI analyzes message for scam indicators
-3. **Agent Activation**: If scam detected (confidence ≥ threshold), agent engages
-4. **Conversation**: Agent maintains human-like persona to extract intelligence
-5. **Intelligence Extraction**: System extracts bank accounts, UPI IDs, links, etc.
-6. **Callback**: Final results sent to GUVI evaluation endpoint
-
-## Testing
-
-```bash
-# Run tests
-pytest tests/
-
-# Run with coverage
-pytest --cov=app tests/
-```
-
-## Example cURL Request
-
-```bash
-curl -X POST "http://localhost:8000/api/v1/conversation" \
-  -H "x-api-key: your_api_key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "sessionId": "test-session-123",
-    "message": {
-      "sender": "scammer",
-      "text": "Your bank account will be blocked. Verify immediately.",
-      "timestamp": 1770005528731
-    },
-    "conversationHistory": [],
-    "metadata": {
-      "channel": "SMS",
-      "language": "English",
-      "locale": "IN"
-    }
-  }'
-```
-
-## Logging
-
-Logs are written to stdout with structured format:
-
-```
-2024-02-04 10:30:15 - scambot_honeypot - INFO - Received message - Session: abc123
-```
-
-Log levels: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
-
-## Security
-
-- API key authentication on all endpoints
-- No storage of real personal information
-- Session timeout (default 1 hour)
-- Input validation with Pydantic models
-- Secure environment variable handling
-
-## Production Deployment on Render
-
-This application is configured for zero-config deployment on Render using [render.yaml](render.yaml).
-
-### Deployment Steps:
-1. Push code to GitHub
-2. Connect repository to Render
-3. Set environment variables in Render dashboard
-4. Deploy automatically
-
-See [RENDER_DEPLOYMENT_GUIDE.md](RENDER_DEPLOYMENT_GUIDE.md) for complete instructions.
-
-### Required Environment Variables:
-- `API_KEY`: Generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"`
-- `OPENAI_API_KEY`: Your OpenAI API key
-
-### Keeping Service Alive:
-Render Free Tier spins down after 15 minutes. Use UptimeRobot to keep it alive:
-- Monitor URL: `https://your-service.onrender.com/health`
-- Interval: Every 5 minutes
-
-See [UPTIMEROBOT_SETUP.md](UPTIMEROBOT_SETUP.md) for setup instructions.
-
-## Monitoring
-
-Monitor these metrics:
-
-- Active sessions: `GET /health`
-- Response times
-- OpenAI API usage
-- Error rates in logs
-
-## Troubleshooting
-
-### OpenAI API Errors
-
-- Check API key is valid
-- Verify API quota/billing
-- Check model name is correct
-
-### Sessions Not Persisting
-
-- Sessions are in-memory (cleared on restart)
-- Consider adding Redis for production
-
-### High Response Times
-
-- Check OpenAI API latency
-- Reduce `MAX_TOKENS` if needed
-- Consider caching strategies
-
-## License
-
-This project is created for the GUVI Hackathon challenge.
-
-## Support
-
-For issues or questions, check the logs first:
-
-```bash
-docker-compose logs -f scambot-api
 ```
 
 ---
 
-Built with FastAPI, OpenAI, and enterprise best practices.
+## Testing
+
+```bash
+# Run unit tests
+pytest tests/
+
+# Run automated demo (9-message SBI impersonation scenario)
+python demo_conversation.py --fast
+
+# Test against live deployment
+python demo_conversation.py --count 3
+```
+
+---
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `API_KEY` | Yes | - | API authentication key |
+| `OPENAI_API_KEY` | Yes | - | OpenAI API key |
+| `MONGODB_URI` | No | `""` | MongoDB connection string |
+| `ADMIN_API_KEY` | No | `""` | Admin endpoint authentication |
+| `OPENAI_MODEL` | No | `gpt-4o` | OpenAI model |
+| `OPENAI_TEMPERATURE` | No | `0.7` | Response creativity |
+| `SCAM_CONFIDENCE_THRESHOLD` | No | `0.7` | Detection threshold |
+| `GUVI_CALLBACK_URL` | No | hackathon URL | Evaluation callback endpoint |
+| `BASE_URL` | No | auto-detected | Base URL for PDF download links |
+
+---
+
+## License
+
+Built for the India AI Impact Buildathon hackathon.

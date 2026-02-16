@@ -60,9 +60,27 @@ htmlcov/
 
 .claude/
 
-# Test/check scripts with potential hardcoded values
+# Internal dev/test scripts
 check_session_pdf.py
 test_pdf_storage.py
+demo_for_ppt.py
+main_tester.py
+FINAL.py
 
-# Files containing sensitive context
+# Internal documentation (not for public repo)
 PROJECT_FULL_CONTEXT.md
+JURY_PREPARATION.md
+DEMO_SCRIPT.md
+DETECTION_ROUTING_GUIDE.md
+ML_IMPLEMENTATION_OVERVIEW.md
+ML_OPTIMIZATION_SUMMARY.md
+PDF_GENERATION_FIX.md
+PDF_PERIODIC_UPDATE_SYSTEM.md
+PDF_STORAGE_IMPLEMENTATION.md
+PDF_STORAGE_QUICKSTART.md
+PRE_PUSH_VERIFICATION.md
+
+# Hackathon materials
+AI for Fraud Detection & User Safety document.txt
+India AI Impact Buildathon - Sample PPT.pptx
+*.pptx
