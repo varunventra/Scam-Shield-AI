@@ -77,8 +77,9 @@ class CallbackHandler:
         """
         Determine if callback should be sent.
 
-        GUVI REQUIREMENT: Prioritize thoroughness over speed.
-        HARD FLOOR: Only send callback after 18+ messages to ensure maximum intelligence extraction.
+        Evaluation uses max 10 turns (= 20 messages).  Send the callback
+        early (>= 5 messages) and RE-SEND on every subsequent turn so the
+        evaluator always has the latest intelligence snapshot.
 
         Args:
             session_id: Session identifier
@@ -89,20 +90,17 @@ class CallbackHandler:
         Returns:
             True if callback should be sent
         """
-        # HARD FLOOR: Only send after substantial engagement (18+ messages)
-        # This ensures we capture ALL intelligence before reporting to GUVI
-        # No early triggers - thoroughness over speed
-        should_send = scam_detected and message_count >= 18
+        should_send = scam_detected and message_count >= 5
 
         if should_send:
             logger.info(
                 f"Callback criteria met - Session: {session_id}, "
-                f"Messages: {message_count} (threshold: 18)"
+                f"Messages: {message_count}"
             )
         else:
             logger.debug(
                 f"Callback criteria not met - Session: {session_id}, "
-                f"Scam: {scam_detected}, Messages: {message_count} (need 18+)"
+                f"Scam: {scam_detected}, Messages: {message_count} (need 5+)"
             )
 
         return should_send

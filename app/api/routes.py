@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from app.core.security import verify_api_key, verify_admin_key
 from app.core.logging import logger
 from app.models.requests import ConversationRequest, Message
-from app.models.responses import ConversationResponse, FinalResultPayload
+from app.models.responses import ConversationResponse, EngagementMetrics, FinalResultPayload
 from app.services import (
     ScamDetector, AIAgent, IntelligenceExtractor, CallbackHandler, ForensicReporter,
     detect_language, detect_response_language, select_persona, get_persona_prompt,
@@ -314,7 +314,6 @@ async def handle_conversation(
         # -----------------------------------------------------------------
         intelligence = None
         agent_notes = ""
-        should_end = await ai_agent.should_end_conversation(request)
         message_count = session.get_message_count()
 
         if message_count >= 3 and session.scam_detected:
@@ -436,7 +435,8 @@ async def handle_conversation(
 
 
         # -----------------------------------------------------------------
-        # CALLBACK LOGIC
+        # CALLBACK LOGIC  (re-send on every qualifying turn so the
+        # evaluator always has the latest intelligence snapshot)
         # -----------------------------------------------------------------
         final_callback_payload_dict = None
         callback_sent = session.callback_sent
@@ -450,15 +450,30 @@ async def handle_conversation(
                 intelligence
             )
 
-            safety_trigger = should_end and message_count >= 10 and intelligence is not None
+            safety_trigger = message_count >= 10 and intelligence is not None
 
-            if (should_send or safety_trigger) and not session.callback_sent:
+            if should_send or safety_trigger:
+                # Calculate engagement duration from first message timestamp
+                engagement_seconds = 0
+                if session.messages and len(session.messages) >= 2:
+                    first_ts = session.messages[0].timestamp
+                    last_ts = session.messages[-1].timestamp
+                    if isinstance(first_ts, (int, float)) and isinstance(last_ts, (int, float)):
+                        engagement_seconds = max(int((last_ts - first_ts) / 1000), 1)
+                    if engagement_seconds <= 0:
+                        engagement_seconds = message_count * 15  # fallback estimate
+
                 final_payload = FinalResultPayload(
                     sessionId=request.sessionId,
+                    status="completed",
                     scamDetected=session.scam_detected,
                     totalMessagesExchanged=message_count,
                     extractedIntelligence=intelligence,
-                    agentNotes=agent_notes
+                    engagementMetrics=EngagementMetrics(
+                        totalMessagesExchanged=message_count,
+                        engagementDurationSeconds=engagement_seconds,
+                    ),
+                    agentNotes=agent_notes,
                 )
                 final_callback_payload_dict = final_payload.model_dump()
 
