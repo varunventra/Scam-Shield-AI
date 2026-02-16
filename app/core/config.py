@@ -129,18 +129,18 @@ def validate_configuration():
             print(f"   Error Message: {error_msg}")
 
             if "authentication" in error_msg.lower() or "api_key" in error_msg.lower():
-                print(f"\n🚨 CRITICAL: Invalid OpenAI API key!")
+                print(f"\n WARNING: Invalid OpenAI API key!")
                 print(f"   1. Check your OPENAI_API_KEY in .env file")
                 print(f"   2. Verify the key at https://platform.openai.com/api-keys")
                 print(f"   3. Ensure the key has proper permissions")
-                sys.exit(1)
+                print(f"   Server will start but AI responses will fail until key is fixed.")
 
             elif "model" in error_msg.lower() or "not found" in error_msg.lower():
-                print(f"\n🚨 CRITICAL: Model '{settings.openai_model}' not accessible!")
+                print(f"\n WARNING: Model '{settings.openai_model}' not accessible!")
                 print(f"   1. Your API key may not have access to {settings.openai_model}")
                 print(f"   2. Try setting OPENAI_MODEL=gpt-3.5-turbo in .env")
                 print(f"   3. Check https://platform.openai.com/account/limits")
-                sys.exit(1)
+                print(f"   Server will start but AI responses will fail until model is fixed.")
 
             elif "rate_limit" in error_msg.lower():
                 print(f"\n⚠️  WARNING: Rate limit error (but API key is valid)")
