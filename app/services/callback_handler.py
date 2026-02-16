@@ -90,7 +90,7 @@ class CallbackHandler:
         Returns:
             True if callback should be sent
         """
-        should_send = scam_detected and message_count >= 5
+        should_send = scam_detected and message_count >= 3
 
         if should_send:
             logger.info(

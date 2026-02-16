@@ -316,7 +316,9 @@ async def handle_conversation(
         agent_notes = ""
         message_count = session.get_message_count()
 
-        if message_count >= 3 and session.scam_detected:
+        # Always extract intelligence - honeypot fail-open philosophy
+        # No scam_detected guard: extract from every message regardless
+        if message_count >= 2:
             all_messages = session.messages
 
             intelligence = intelligence_extractor.extract_intelligence(request, all_messages)
@@ -442,7 +444,7 @@ async def handle_conversation(
         callback_sent = session.callback_sent
         callback_sent_at = None
 
-        if intelligence is not None and message_count >= 3:
+        if intelligence is not None and message_count >= 2:
             should_send = await callback_handler.should_send_callback(
                 request.sessionId,
                 session.scam_detected,
