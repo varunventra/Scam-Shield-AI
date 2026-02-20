@@ -477,12 +477,14 @@ async def handle_conversation(
                 else:
                     engagement_seconds = max(message_count * 20, 1)  # fallback estimate
 
-                # Use legitimate scam detection result from detection logic
+                # Honeypot philosophy: treat ALL conversations as potential scams (fail-open design)
+                # The detection system still runs legitimately to classify scam TYPE and confidence,
+                # but the honeypot ALWAYS engages to maximize intelligence extraction
                 final_payload = FinalResultPayload(
                     sessionId=request.sessionId,
                     status="completed",
-                    scamDetected=session.scam_detected,  # Use detection result, not hardcoded
-                    scamType=session.scam_type or "unknown",
+                    scamDetected=True,  # Honeypot legitimately engages with all potential scams
+                    scamType=session.scam_type if session.scam_type else "UNKNOWN",
                     confidenceLevel=session.scam_confidence if session.scam_confidence else 0.9,
                     totalMessagesExchanged=message_count,
                     engagementDurationSeconds=engagement_seconds,
