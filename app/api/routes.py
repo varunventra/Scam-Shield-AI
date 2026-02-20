@@ -491,11 +491,72 @@ async def handle_conversation(
                 from app.models.responses import ExtractedIntelligence
                 final_intelligence = intelligence if intelligence is not None else ExtractedIntelligence()
 
+                # Map scamType intelligently based on conversation content (NEVER "UNKNOWN")
+                def infer_scam_type(session_scam_type: str, conversation_text: str, intel: ExtractedIntelligence) -> str:
+                    """Infer scam type from conversation if not already detected."""
+                    if session_scam_type and session_scam_type != "UNKNOWN":
+                        return session_scam_type
+
+                    # Build full conversation text
+                    conv_lower = conversation_text.lower()
+
+                    # Bank/Account fraud indicators
+                    bank_keywords = ["bank", "kyc", "account", "debit", "credit", "ifsc", "branch", "atm", "savings", "current"]
+                    if any(k in conv_lower for k in bank_keywords):
+                        return "bank_fraud"
+
+                    # UPI fraud indicators
+                    upi_keywords = ["upi", "paytm", "phonepe", "googlepay", "bhim"]
+                    if any(k in conv_lower for k in upi_keywords) or intel.upiIds:
+                        return "upi_fraud"
+
+                    # Phishing indicators
+                    phishing_keywords = ["link", "click", "verify", "portal", "website", "login"]
+                    if any(k in conv_lower for k in phishing_keywords) or intel.phishingLinks:
+                        return "phishing"
+
+                    # Insurance fraud
+                    insurance_keywords = ["insurance", "policy", "lic", "premium", "renewal", "lapse"]
+                    if any(k in conv_lower for k in insurance_keywords):
+                        return "insurance_fraud"
+
+                    # Refund scam
+                    refund_keywords = ["refund", "order", "amazon", "flipkart", "cancelled", "return"]
+                    if any(k in conv_lower for k in refund_keywords):
+                        return "refund_fraud"
+
+                    # Police/Threat scam
+                    police_keywords = ["police", "arrest", "fir", "cybercrime", "case", "officer"]
+                    if any(k in conv_lower for k in police_keywords):
+                        return "impersonation_fraud"
+
+                    # Default: generic fraud (NEVER "UNKNOWN")
+                    return "generic_fraud"
+
+                # Build conversation text for scam type inference
+                all_conv_text = " ".join(msg.text for msg in session.messages)
+                final_scam_type = infer_scam_type(session.scam_type, all_conv_text, final_intelligence)
+
+                # DIAGNOSTIC LOGGING for intelligence extraction
+                logger.info(
+                    f"📊 Intelligence Extraction Summary - Session: {request.sessionId}\n"
+                    f"  Phones: {final_intelligence.phoneNumbers}\n"
+                    f"  UPIs: {final_intelligence.upiIds}\n"
+                    f"  Banks: {final_intelligence.bankAccounts}\n"
+                    f"  Links: {final_intelligence.phishingLinks}\n"
+                    f"  Emails: {final_intelligence.emailAddresses}\n"
+                    f"  Case IDs: {final_intelligence.caseIds}\n"
+                    f"  Policy Numbers: {final_intelligence.policyNumbers}\n"
+                    f"  Order Numbers: {final_intelligence.orderNumbers}\n"
+                    f"  ScamType: {final_scam_type}\n"
+                    f"  Duration: {engagement_seconds}s"
+                )
+
                 final_payload = FinalResultPayload(
                     sessionId=request.sessionId,
                     status="completed",
                     scamDetected=True,  # Honeypot legitimately engages with all potential scams
-                    scamType=session.scam_type if session.scam_type else "UNKNOWN",
+                    scamType=final_scam_type,
                     confidenceLevel=session.scam_confidence if session.scam_confidence else 0.9,
                     totalMessagesExchanged=message_count,
                     engagementDurationSeconds=engagement_seconds,

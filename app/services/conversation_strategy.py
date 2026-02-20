@@ -170,31 +170,47 @@ def calculate_trust_level(
 def identify_missing_targets(extracted_intelligence: Dict[str, List]) -> List[str]:
     """
     Identify which intelligence targets are still missing.
+    HARD PIVOT: Once we have ANY instance of a type, it's NO LONGER missing.
 
     Args:
         extracted_intelligence: Current extracted intelligence dict
 
     Returns:
-        List of missing target types
+        List of missing target types (strict priority order)
     """
     missing = []
 
-    # Primary targets (high value)
+    # Primary targets (high value) - STRICT: if we have 1+, it's NOT missing
     if not extracted_intelligence.get("phoneNumbers", []):
         missing.append("phone_number")
+
     if not extracted_intelligence.get("upiIds", []):
         missing.append("upi_id")
+
     if not extracted_intelligence.get("bankAccounts", []):
         missing.append("bank_account")
+
     if not extracted_intelligence.get("phishingLinks", []):
         missing.append("phishing_link")
 
     # Secondary targets (bonus intel)
-    if not extracted_intelligence.get("emails", []):
+    if not extracted_intelligence.get("emailAddresses", []) and not extracted_intelligence.get("emails", []):
         missing.append("email")
 
-    # Always try for these
-    missing.extend(["employee_id", "branch_name", "ifsc_code", "alternate_contact"])
+    # Tertiary targets (only ask if primary targets are collected)
+    has_primary = (
+        extracted_intelligence.get("phoneNumbers", []) or
+        extracted_intelligence.get("upiIds", []) or
+        extracted_intelligence.get("bankAccounts", [])
+    )
+
+    if has_primary:
+        # Only ask for these AFTER we have phone/UPI/bank
+        missing.extend(["employee_id", "branch_name", "case_number", "reference_number"])
+
+    # If nothing missing, ask for alternate/backup
+    if not missing:
+        missing.append("alternate_contact")
 
     return missing
 
@@ -240,12 +256,26 @@ def build_extraction_strategy_prompt(
             collected.append(f"{key.replace('_', ' ').title()}: {', '.join(str(v) for v in display_values)}")
 
     if has_collected:
-        lines.append(f"✅ ALREADY EXTRACTED (DO NOT ASK FOR THESE AGAIN):")
+        lines.append(f"✅ ALREADY EXTRACTED (STRICT PIVOT REQUIRED):")
         for item in collected:
             lines.append(f"  - {item}")
         lines.append("")
-        lines.append("⚠️ CRITICAL: Do NOT ask for phone numbers, UPIs, or links that are already listed above!")
-        lines.append("If they already shared data, acknowledge it and move to NEXT missing target.")
+        lines.append("🚫 HARD PIVOT RULE:")
+        lines.append("  - If phone number is listed above → NEVER ask for phone again")
+        lines.append("  - If UPI is listed above → NEVER ask for UPI again")
+        lines.append("  - If bank account is listed above → NEVER ask for bank again")
+        lines.append("  - If link is listed above → NEVER ask for link again")
+        lines.append("")
+        lines.append("✅ INSTEAD: Acknowledge what you got and PIVOT to next missing target:")
+        lines.append('  - "I see the UPI. But what is your employee ID for my records?"')
+        lines.append('  - "Got the phone number. Which branch are you from?"')
+        lines.append('  - "I have the link. Can you confirm your email ID?"')
+        lines.append("")
+        lines.append("🎯 GREEDY HUNTER (Optional for 7/7 Info Elicitation bonus):")
+        lines.append("  - If they gave 1 instance, you MAY ask for alternate/backup ONCE:")
+        lines.append('  - "This UPI didn\'t work, do you have another one?"')
+        lines.append('  - "Can I get a backup phone number in case?"')
+        lines.append("  - But ONLY do this ONCE per type, then HARD PIVOT to next target")
         lines.append("")
 
     # Display missing targets
