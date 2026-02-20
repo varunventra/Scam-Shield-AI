@@ -133,6 +133,7 @@ def calculate_trust_level(
 ) -> str:
     """
     Calculate trust level based on conversation progression.
+    OPTIMIZED FOR 10-TURN EVALUATION: Escalate faster to extract more.
 
     Args:
         strategy: Current strategy state
@@ -142,30 +143,28 @@ def calculate_trust_level(
     Returns:
         Trust level: low, medium, high
     """
-    # Start with current level
-    if strategy.turn_count <= 3:
+    # Turn 1: Always low (initial contact)
+    if strategy.turn_count <= 1:
         return "low"
 
-    # Scammer sharing details builds trust
-    if scammer_provided_details:
-        if strategy.turn_count >= 8:
+    # Scammer threatening → victim becomes MORE compliant immediately
+    if scammer_threatening:
+        if strategy.turn_count >= 3:
             return "high"
-        elif strategy.turn_count >= 5:
-            return "medium"
-        else:
-            return "low"
-
-    # Threats make victim more compliant (increase trust paradoxically)
-    if scammer_threatening and strategy.turn_count >= 5:
         return "medium"
 
-    # Default progression based on turn count
-    if strategy.turn_count >= 10:
+    # Scammer sharing details builds trust fast
+    if scammer_provided_details:
+        if strategy.turn_count >= 4:
+            return "high"
+        return "medium"
+
+    # Default: escalate by turn count (optimized for 10-turn max)
+    if strategy.turn_count >= 5:
         return "high"
-    elif strategy.turn_count >= 6:
+    elif strategy.turn_count >= 2:
         return "medium"
-    else:
-        return "low"
+    return "low"
 
 
 def identify_missing_targets(extracted_intelligence: Dict[str, List]) -> List[str]:

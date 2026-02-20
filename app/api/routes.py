@@ -99,7 +99,14 @@ async def handle_conversation(
         if not validate_session_id(request.sessionId):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid session ID"
+                detail="Invalid session ID format. Must be alphanumeric with hyphens/underscores."
+            )
+
+        # Validate message text is not empty
+        if not request.message.text or not request.message.text.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Message text cannot be empty"
             )
 
         logger.info(
@@ -253,7 +260,7 @@ async def handle_conversation(
 
         message_count = session.get_message_count()
 
-        if message_count >= 2:
+        if message_count >= 1:
             try:
                 early_intel = intelligence_extractor.extract_intelligence(request, session.messages)
                 early_intel_dict = deduplicate_intelligence(early_intel.model_dump())
@@ -317,8 +324,8 @@ async def handle_conversation(
         message_count = session.get_message_count()
 
         # Always extract intelligence - honeypot fail-open philosophy
-        # No scam_detected guard: extract from every message regardless
-        if message_count >= 2:
+        # Extract from EVERY turn including turn 1 (initial message may contain data)
+        if message_count >= 1:
             all_messages = session.messages
 
             intelligence = intelligence_extractor.extract_intelligence(request, all_messages)
@@ -444,7 +451,7 @@ async def handle_conversation(
         callback_sent = session.callback_sent
         callback_sent_at = None
 
-        if intelligence is not None and message_count >= 2:
+        if intelligence is not None and message_count >= 1:
             should_send = await callback_handler.should_send_callback(
                 request.sessionId,
                 session.scam_detected,

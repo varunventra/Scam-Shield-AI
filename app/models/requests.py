@@ -14,6 +14,22 @@ class Message(BaseModel):
     text: str = Field(..., description="Message content")
     timestamp: Any = Field(..., description="Epoch time in milliseconds or ISO string")
 
+    @field_validator("sender", mode="before")
+    @classmethod
+    def validate_sender(cls, v):
+        """Normalize sender field to lowercase."""
+        if isinstance(v, str):
+            return v.strip().lower()
+        return v
+
+    @field_validator("text", mode="before")
+    @classmethod
+    def validate_text(cls, v):
+        """Ensure text is non-empty string."""
+        if not isinstance(v, str) or not v.strip():
+            return "..."  # Fallback for empty messages
+        return v.strip()
+
     @field_validator("timestamp", mode="before")
     @classmethod
     def coerce_timestamp(cls, v):

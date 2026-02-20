@@ -67,5 +67,10 @@ def validate_session_id(session_id: str) -> bool:
     if not session_id or not isinstance(session_id, str):
         return False
 
-    # Basic validation: non-empty string
-    return len(session_id.strip()) > 0
+    stripped = session_id.strip()
+    if not stripped or len(stripped) > 256:
+        return False
+
+    # Allow alphanumeric, hyphens, underscores, dots (UUID-compatible)
+    import re
+    return bool(re.match(r'^[a-zA-Z0-9_.\-]+$', stripped))
