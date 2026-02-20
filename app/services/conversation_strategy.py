@@ -229,16 +229,23 @@ def build_extraction_strategy_prompt(
         "",
     ]
 
-    # Display what we've collected
+    # Display what we've collected with ACTUAL VALUES (state-aware)
     collected = []
+    has_collected = False
     for key, values in strategy.info_collected.items():
         if values:
-            collected.append(f"{key}: {len(values)} items")
+            has_collected = True
+            # Show first few values to make agent aware of what NOT to ask for
+            display_values = values[:3] if len(values) <= 3 else values[:2] + [f"... +{len(values)-2} more"]
+            collected.append(f"{key.replace('_', ' ').title()}: {', '.join(str(v) for v in display_values)}")
 
-    if collected:
-        lines.append(f"✅ INTELLIGENCE COLLECTED:")
+    if has_collected:
+        lines.append(f"✅ ALREADY EXTRACTED (DO NOT ASK FOR THESE AGAIN):")
         for item in collected:
             lines.append(f"  - {item}")
+        lines.append("")
+        lines.append("⚠️ CRITICAL: Do NOT ask for phone numbers, UPIs, or links that are already listed above!")
+        lines.append("If they already shared data, acknowledge it and move to NEXT missing target.")
         lines.append("")
 
     # Display missing targets
@@ -452,21 +459,30 @@ def build_extraction_strategy_prompt(
             "",
         ])
 
-    # Hard constraints
+    # Hard constraints with anti-loop protection
     lines.extend([
         "=" * 70,
         "🚨 ABSOLUTE RULES (NEVER VIOLATE):",
         "=" * 70,
         "1. NEVER break character or reveal honeypot intent",
         "2. ALWAYS respond in the language they just used",
-        "3. NEVER repeat a question you already asked",
-        "4. NEVER ask for info you already have",
-        "5. Every message MUST end with a question asking for missing intelligence",
+        "3. NEVER repeat a question you already asked in previous turns",
+        "4. NEVER ask for info you already have (check ALREADY EXTRACTED list above)",
+        "5. Every message MUST end with a question asking for MISSING intelligence only",
         "6. Stay in persona - you are a scared/confused victim who WANTS to comply",
         "",
+        "🚫 ANTI-LOOP PROTECTION (CRITICAL):",
+        "  - If you already asked for phone number → DON'T ask again",
+        "  - If you already asked for UPI → DON'T ask again",
+        "  - If you already asked for link → DON'T ask again",
+        "  - ALWAYS move to the NEXT missing target from the priority list",
+        "  - If they didn't answer your question → ask it DIFFERENTLY or move on",
+        "  - Never use the same question pattern twice in a row",
+        "",
         "✅ THIS MESSAGE MUST:",
-        f"  - React to their message briefly (show emotion/compliance)",
+        f"  - React to their message briefly (show emotion/compliance with red flag keywords)",
         f"  - Then ASK for: {strategy.missing_targets[0].replace('_', ' ').title() if strategy.missing_targets else 'any remaining intel'}",
+        "  - If that target was asked before → ask for next target: {strategy.missing_targets[1].replace('_', ' ').title() if len(strategy.missing_targets) > 1 else 'alternate contact info'}",
         "  - Length: 10-30 words (enough for emotion + question)",
         "  - MUST end with a question mark (?)",
         "",
