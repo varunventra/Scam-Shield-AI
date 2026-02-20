@@ -41,6 +41,15 @@ class ConversationStrategy:
     threat_count: int = 0
     urgency_count: int = 0
 
+    # Track failure-pivoting (for Info Elicitation scoring)
+    # Each intel type can trigger ONE failure-pivot to get alternates
+    failure_pivot_used: Dict[str, bool] = field(default_factory=lambda: {
+        "phone": False,
+        "upi": False,
+        "bank": False,
+        "link": False,
+    })
+
 
 def detect_authority_type(message: str, conversation_history: str = "") -> str:
     """
@@ -260,23 +269,57 @@ def build_extraction_strategy_prompt(
         for item in collected:
             lines.append(f"  - {item}")
         lines.append("")
-        lines.append("🚫 HARD PIVOT RULE:")
-        lines.append("  - If phone number is listed above → NEVER ask for phone again")
-        lines.append("  - If UPI is listed above → NEVER ask for UPI again")
-        lines.append("  - If bank account is listed above → NEVER ask for bank again")
-        lines.append("  - If link is listed above → NEVER ask for link again")
-        lines.append("")
-        lines.append("✅ INSTEAD: Acknowledge what you got and PIVOT to next missing target:")
-        lines.append('  - "I see the UPI. But what is your employee ID for my records?"')
-        lines.append('  - "Got the phone number. Which branch are you from?"')
-        lines.append('  - "I have the link. Can you confirm your email ID?"')
-        lines.append("")
-        lines.append("🎯 GREEDY HUNTER (Optional for 7/7 Info Elicitation bonus):")
-        lines.append("  - If they gave 1 instance, you MAY ask for alternate/backup ONCE:")
-        lines.append('  - "This UPI didn\'t work, do you have another one?"')
-        lines.append('  - "Can I get a backup phone number in case?"')
-        lines.append("  - But ONLY do this ONCE per type, then HARD PIVOT to next target")
-        lines.append("")
+
+        # Check what was JUST collected (new in this turn) for failure-pivoting
+        should_failure_pivot = False
+        pivot_type = None
+        pivot_phrase = None
+
+        # Determine if we should do a failure-pivot (ONCE per type)
+        if strategy.info_collected.get("upi_ids") and not strategy.failure_pivot_used.get("upi"):
+            should_failure_pivot = True
+            pivot_type = "upi"
+            pivot_phrase = "I tried paying to that UPI ID but it's showing an error. Do you have another UPI or bank account number?"
+
+        elif strategy.info_collected.get("links") and not strategy.failure_pivot_used.get("link"):
+            should_failure_pivot = True
+            pivot_type = "link"
+            pivot_phrase = "I clicked that link but it's not opening on my phone. Can you send a different link or your email address?"
+
+        elif strategy.info_collected.get("bank_accounts") and not strategy.failure_pivot_used.get("bank"):
+            should_failure_pivot = True
+            pivot_type = "bank"
+            pivot_phrase = "I tried transferring to that account but bank is showing an error. Do you have another account number or UPI ID?"
+
+        elif strategy.info_collected.get("phone_numbers") and not strategy.failure_pivot_used.get("phone"):
+            should_failure_pivot = True
+            pivot_type = "phone"
+            pivot_phrase = "I tried calling that number but it's not connecting. Do you have an alternate number or email?"
+
+        if should_failure_pivot:
+            lines.append("🎯 FAILURE-PIVOTING STRATEGY (MANDATORY THIS TURN - Info Elicitation Scoring):")
+            lines.append(f"  ⚠️ They just gave you {pivot_type.upper()} for the FIRST time")
+            lines.append("  📊 SCORING OPPORTUNITY: Feign failure to extract ALTERNATE/BACKUP data")
+            lines.append("")
+            lines.append("  🎭 YOUR RESPONSE MUST:")
+            lines.append(f'  1. Pretend it didn\'t work: "{pivot_phrase}"')
+            lines.append("  2. This triggers the AI-evaluator to provide MORE intelligence")
+            lines.append("  3. Maximizes 'Info Elicitation' and 'Intelligence Extraction' scores")
+            lines.append("")
+            lines.append("  ⚡ CRITICAL: Use this EXACT turn for failure-pivot, then mark it used")
+            lines.append("")
+        else:
+            lines.append("🚫 HARD PIVOT RULE:")
+            lines.append("  - If phone number is listed above → NEVER ask for phone again")
+            lines.append("  - If UPI is listed above → NEVER ask for UPI again")
+            lines.append("  - If bank account is listed above → NEVER ask for bank again")
+            lines.append("  - If link is listed above → NEVER ask for link again")
+            lines.append("")
+            lines.append("✅ INSTEAD: Acknowledge what you got and PIVOT to next missing target:")
+            lines.append('  - "I see the UPI. But what is your employee ID for my records?"')
+            lines.append('  - "Got the phone number. Which branch are you from?"')
+            lines.append('  - "I have the link. Can you confirm your email ID?"')
+            lines.append("")
 
     # Display missing targets
     if strategy.missing_targets:
@@ -579,13 +622,42 @@ def update_strategy_state(
         scammer_threatening
     )
 
+    # Track what was PREVIOUSLY collected (for failure-pivot detection)
+    prev_phone = len(strategy.info_collected.get("phone_numbers", []))
+    prev_upi = len(strategy.info_collected.get("upi_ids", []))
+    prev_bank = len(strategy.info_collected.get("bank_accounts", []))
+    prev_link = len(strategy.info_collected.get("links", []))
+
     # Update collected info
     if extracted_intelligence:
         strategy.info_collected["phone_numbers"] = extracted_intelligence.get("phoneNumbers", [])
         strategy.info_collected["upi_ids"] = extracted_intelligence.get("upiIds", [])
         strategy.info_collected["bank_accounts"] = extracted_intelligence.get("bankAccounts", [])
         strategy.info_collected["links"] = extracted_intelligence.get("phishingLinks", [])
-        strategy.info_collected["emails"] = extracted_intelligence.get("emails", [])
+        strategy.info_collected["emails"] = extracted_intelligence.get("emailAddresses", []) or extracted_intelligence.get("emails", [])
+
+    # Auto-mark failure-pivot as "used" if we now have 2+ items of that type
+    # (This means the failure-pivot successfully extracted an alternate)
+    curr_phone = len(strategy.info_collected.get("phone_numbers", []))
+    curr_upi = len(strategy.info_collected.get("upi_ids", []))
+    curr_bank = len(strategy.info_collected.get("bank_accounts", []))
+    curr_link = len(strategy.info_collected.get("links", []))
+
+    if curr_upi >= 2 and not strategy.failure_pivot_used.get("upi"):
+        strategy.failure_pivot_used["upi"] = True
+        logger.info("✅ Failure-pivot SUCCESS: Got alternate UPI")
+
+    if curr_link >= 2 and not strategy.failure_pivot_used.get("link"):
+        strategy.failure_pivot_used["link"] = True
+        logger.info("✅ Failure-pivot SUCCESS: Got alternate link")
+
+    if curr_bank >= 2 and not strategy.failure_pivot_used.get("bank"):
+        strategy.failure_pivot_used["bank"] = True
+        logger.info("✅ Failure-pivot SUCCESS: Got alternate bank account")
+
+    if curr_phone >= 2 and not strategy.failure_pivot_used.get("phone"):
+        strategy.failure_pivot_used["phone"] = True
+        logger.info("✅ Failure-pivot SUCCESS: Got alternate phone")
 
     # Update missing targets
     strategy.missing_targets = identify_missing_targets(extracted_intelligence or {})

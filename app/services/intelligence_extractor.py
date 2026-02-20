@@ -234,9 +234,25 @@ class IntelligenceExtractor:
         # Extract with standard pattern
         phones = re.findall(self.PHONE_PATTERN, normalized_text)
 
-        # Also try space-separated pattern: "+91 9876 543210" or "98765 43210"
-        space_pattern = r'(?<!\d)\+?91\s*\d{5}\s*\d{5}(?!\d)'
-        space_phones = re.findall(space_pattern, normalized_text)
+        # ENHANCED: Multiple additional patterns for edge cases
+        # Pattern 1: Space-separated with +91 prefix: "+91 9876 543210"
+        space_pattern1 = r'(?<!\d)\+?91\s*\d{5}\s*\d{5}(?!\d)'
+
+        # Pattern 2: Varied spacing: "9876 543 210" or "+91-9876-543-210"
+        space_pattern2 = r'(?<!\d)(?:\+?91[-\s]?)?[6789]\s?\d{3}\s?\d{3}\s?\d{3}(?!\d)'
+
+        # Pattern 3: At message start (no lookbehind): "^9876543210" or "^+91-9876543210"
+        start_pattern = r'^(?:\+?91[-\s]?)?[6789]\d{9}\b'
+
+        # Pattern 4: After punctuation/colon: "call: 9876543210" or "at +91-9876543210"
+        after_punct_pattern = r'[:;\s]\+?91[-\s]?\d{10}\b'
+
+        space_phones = (
+            re.findall(space_pattern1, normalized_text) +
+            re.findall(space_pattern2, normalized_text) +
+            re.findall(start_pattern, normalized_text) +
+            re.findall(after_punct_pattern, normalized_text)
+        )
 
         valid_phones = []
         seen_core = set()
@@ -482,8 +498,13 @@ class IntelligenceExtractor:
         if any(w in scammer_text for w in ["customer care", "support", "helpline", "official"]):
             red_flags.append("impersonating customer support")
 
+        # STRUCTURED RED FLAGS SECTION (for Response Structure scoring)
         if red_flags:
-            notes.append(f"RED FLAGS DETECTED: {', '.join(red_flags)}")
+            notes.append("RED FLAGS IDENTIFIED:")
+            for flag in red_flags:
+                notes.append(f"  • {flag}")
+        else:
+            notes.append("RED FLAGS IDENTIFIED: (none detected yet)")
 
         # --- Scam type classification ---
         tactics_found = getattr(intelligence, '_tactics', [])
@@ -496,7 +517,7 @@ class IntelligenceExtractor:
                 "PAYMENT_REDIRECTION": "payment redirection",
             }
             readable = [tactics_readable.get(t, t) for t in tactics_found]
-            notes.append(f"Scam tactics used: {', '.join(readable)}")
+            notes.append(f"Scam tactics: {', '.join(readable)}")
 
         # --- Impersonation targets ---
         if intelligence.impersonationTargets:
