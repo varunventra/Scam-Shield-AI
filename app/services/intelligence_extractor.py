@@ -36,6 +36,17 @@ class IntelligenceExtractor:
     AMOUNT_PATTERN = r'(?:Rs\.?|₹|INR)\s*(\d+(?:,\d+)*(?:\.\d+)?)'
     EMPLOYEE_ID_PATTERN = r'(?:employee\s*id|emp\s*id|staff\s*id|emp\.?\s*no)[\s:]+([A-Z0-9]+)'
 
+    # IFSC Code pattern: 4 letters (bank code) + 0 + 6 alphanumeric (branch code)
+    # Example: SBIN0001234, HDFC0000123
+    IFSC_PATTERN = r'\b([A-Z]{4}0[A-Z0-9]{6})\b'
+
+    # PAN Card pattern: 5 letters + 4 digits + 1 letter
+    # Example: ABCDE1234F
+    PAN_PATTERN = r'\b([A-Z]{5}\d{4}[A-Z])\b'
+
+    # Branch name extraction keywords
+    BRANCH_KEYWORDS = ['branch', 'office', 'location', 'centre', 'center', 'headquarters']
+
     # Case ID patterns: CASE-12345, FIR-2024-12345, REF-ABC123, CAS/2024/12345
     CASE_ID_PATTERN = (
         r'(?:case|fir|complaint|reference|ref|ticket|incident|report)[\s:#-]*'
@@ -130,6 +141,16 @@ class IntelligenceExtractor:
         case_ids = self._extract_case_ids(all_text)
         policy_numbers = self._extract_policy_numbers(all_text)
         order_numbers = self._extract_order_numbers(all_text)
+
+        # Extract financial identifiers (IFSC, PAN, Branch names)
+        ifsc_codes = self._extract_ifsc_codes(all_text)
+        pan_numbers = self._extract_pan_numbers(all_text)
+        branch_names = self._extract_branch_names(all_text)
+
+        # Combine with employee IDs for internal storage
+        employee_ids.extend(ifsc_codes)  # Store IFSC in employee_ids (internal field)
+        employee_ids.extend(pan_numbers)  # Store PAN in employee_ids (internal field)
+        employee_ids.extend(branch_names)  # Store branch names in employee_ids (internal field)
 
         # Extract company/bank names
         impersonation_targets = self._extract_companies_banks(scammer_text)
@@ -423,6 +444,37 @@ class IntelligenceExtractor:
 
         return list(set(targets))
 
+    def _extract_ifsc_codes(self, text: str) -> List[str]:
+        """Extract IFSC codes (Indian Financial System Code)."""
+        # IFSC format: 4 letters (bank code) + 0 + 6 alphanumeric
+        ifsc_codes = re.findall(self.IFSC_PATTERN, text.upper())
+        return list(set(ifsc_codes))
+
+    def _extract_pan_numbers(self, text: str) -> List[str]:
+        """Extract PAN card numbers."""
+        # PAN format: 5 letters + 4 digits + 1 letter
+        pan_numbers = re.findall(self.PAN_PATTERN, text.upper())
+        return list(set(pan_numbers))
+
+    def _extract_branch_names(self, text: str) -> List[str]:
+        """Extract bank branch names or locations."""
+        branch_names = []
+        text_lower = text.lower()
+
+        # Look for branch mentions with location names
+        for keyword in self.BRANCH_KEYWORDS:
+            # Pattern: "branch" followed by location name
+            pattern = rf'{keyword}[\s:]+([A-Za-z\s]+?)(?:\s+branch|,|\.|\s+sir|$)'
+            matches = re.findall(pattern, text_lower, re.IGNORECASE)
+            branch_names.extend([m.strip().title() for m in matches if len(m.strip()) > 2])
+
+        # Also look for common city/location patterns
+        location_pattern = r'(?:mumbai|delhi|bangalore|chennai|kolkata|hyderabad|pune|ahmedabad|jaipur|surat)\s+(?:branch|office|centre)'
+        locations = re.findall(location_pattern, text_lower, re.IGNORECASE)
+        branch_names.extend([loc.title() for loc in locations])
+
+        return list(set(b for b in branch_names if 3 <= len(b) <= 50))
+
     def _analyze_tactics(self, text: str) -> List[str]:
         """Analyze scam tactics used."""
         text_lower = text.lower()
@@ -519,31 +571,39 @@ class IntelligenceExtractor:
             readable = [tactics_readable.get(t, t) for t in tactics_found]
             notes.append(f"Scam tactics: {', '.join(readable)}")
 
+        # --- IDENTIFIED SCAMMER INFRASTRUCTURE (Structured) ---
+        infrastructure = []
+        if intelligence.phoneNumbers:
+            # Deduplicate to core numbers
+            cores = list(set(p.replace("+91-", "").replace("+91", "").replace(" ", "").replace("-", "") for p in intelligence.phoneNumbers))
+            infrastructure.append(f"Phone: {', '.join(cores[:3])}")  # Show up to 3
+        if intelligence.upiIds:
+            infrastructure.append(f"UPI: {', '.join(intelligence.upiIds[:3])}")
+        if intelligence.bankAccounts:
+            infrastructure.append(f"Bank Account: {', '.join(intelligence.bankAccounts[:2])}")
+        if intelligence.phishingLinks:
+            infrastructure.append(f"Phishing Link: {', '.join(intelligence.phishingLinks[:2])}")
+        if intelligence.emailAddresses:
+            infrastructure.append(f"Email: {', '.join(intelligence.emailAddresses[:2])}")
+        if intelligence.caseIds:
+            infrastructure.append(f"Case/Ref ID: {', '.join(intelligence.caseIds[:2])}")
+        if intelligence.policyNumbers:
+            infrastructure.append(f"Policy Number: {', '.join(intelligence.policyNumbers[:2])}")
+        if intelligence.orderNumbers:
+            infrastructure.append(f"Order Number: {', '.join(intelligence.orderNumbers[:2])}")
+
+        if infrastructure:
+            notes.append("IDENTIFIED SCAMMER INFRASTRUCTURE:")
+            for item in infrastructure:
+                notes.append(f"  • {item}")
+        else:
+            notes.append("IDENTIFIED SCAMMER INFRASTRUCTURE: (none extracted yet)")
+
         # --- Impersonation targets ---
         if intelligence.impersonationTargets:
             notes.append(f"Impersonating: {', '.join(intelligence.impersonationTargets)}")
 
-        # --- Intelligence extraction summary ---
-        extraction_success = []
-        if intelligence.bankAccounts:
-            extraction_success.append(f"bank accounts: {intelligence.bankAccounts}")
-        if intelligence.upiIds:
-            extraction_success.append(f"UPI IDs: {intelligence.upiIds}")
-        if intelligence.phoneNumbers:
-            # Show deduplicated core numbers
-            cores = list(set(p.replace("+91-", "").replace("+91", "") for p in intelligence.phoneNumbers))
-            extraction_success.append(f"phone numbers: {cores}")
-        if intelligence.phishingLinks:
-            extraction_success.append(f"phishing links: {intelligence.phishingLinks}")
-        if intelligence.emailAddresses:
-            extraction_success.append(f"email addresses: {intelligence.emailAddresses}")
-
-        if extraction_success:
-            notes.append(f"Intelligence extracted: {'; '.join(extraction_success)}")
-        else:
-            notes.append("No concrete intelligence extracted yet - scammer has not revealed identifiable details")
-
         # --- Engagement summary ---
-        notes.append(f"{len(all_messages)} messages exchanged")
+        notes.append(f"Messages exchanged: {len(all_messages)}")
 
         return ". ".join(notes) if notes else "Scam conversation detected - monitoring for intelligence"

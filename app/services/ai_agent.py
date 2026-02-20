@@ -484,19 +484,36 @@ Respond: "i dont understand sir. can you give me your phone number to call?"
                     logger.info(f"🔄 Repeat scammer adaptive prompt injected - Session: {request.sessionId}")
 
                 if known_intelligence:
-                    system_prompt += f"""
+                    # Build explicit list of what we have
+                    has_items = []
+                    if known_intelligence.get("phoneNumbers"):
+                        has_items.append(f"Phone Numbers: {known_intelligence['phoneNumbers'][:3]}")
+                    if known_intelligence.get("upiIds"):
+                        has_items.append(f"UPI IDs: {known_intelligence['upiIds'][:3]}")
+                    if known_intelligence.get("bankAccounts"):
+                        has_items.append(f"Bank Accounts: {known_intelligence['bankAccounts'][:3]}")
+                    if known_intelligence.get("phishingLinks"):
+                        has_items.append(f"Links: {known_intelligence['phishingLinks'][:2]}")
+                    if known_intelligence.get("emailAddresses") or known_intelligence.get("emails"):
+                        emails = known_intelligence.get("emailAddresses") or known_intelligence.get("emails")
+                        has_items.append(f"Emails: {emails[:2]}")
 
-                KNOWN EXTRACTED INTELLIGENCE (DO NOT ASK AGAIN):
-                - phoneNumbers: {known_intelligence.get("phoneNumbers", [])}
-                - bankAccounts: {known_intelligence.get("bankAccounts", [])}
-                - upiIds: {known_intelligence.get("upiIds", [])}
-                - phishingLinks: {known_intelligence.get("phishingLinks", [])}
-                - emails: {known_intelligence.get("emails", [])}
+                    if has_items:
+                        system_prompt += f"""
 
-                RULE:
-                If an item exists here, do NOT ask for it again.
-                Instead confirm it or move to a new target.
-                """
+🚨 LATEST INTEL - ALREADY EXTRACTED (TURN 1 LITERACY):
+{''.join(f'  • {item}' + chr(10) for item in has_items)}
+⚠️ CRITICAL RULES:
+1. DO NOT ask for items listed above - we ALREADY HAVE them
+2. ACKNOWLEDGE what they gave: "I see you provided the UPI ID"
+3. IMMEDIATELY PIVOT to next missing target (employee ID, branch, email, etc.)
+4. If you ask for something we already have = SCORING PENALTY
+
+CORRECT RESPONSE PATTERN:
+  ✅ "Got the UPI. But what is your branch name for my records?"
+  ✅ "I have the link. Can you confirm your email address?"
+  ❌ "Can you give me the UPI ID?" (we already have it!)
+"""
 
 
             # Call OpenAI API (synchronous call in async function is fine)

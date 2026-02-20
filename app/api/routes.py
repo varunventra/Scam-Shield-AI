@@ -252,28 +252,52 @@ async def handle_conversation(
         )
 
         # -----------------------------------------------------------------
-        # REPEAT SCAMMER DETECTION (early pass for adaptive prompt)
+        # PRE-PROCESSING EXTRACTION PIPELINE (Extract-Before-Speak Architecture)
+        # CRITICAL: Extract intelligence BEFORE AI generates response for Turn 1 literacy
         # -----------------------------------------------------------------
+        message_count = session.get_message_count()
+        intelligence = None
         repeat_info = None
         repeat_matches_for_prompt = None
-        early_intel_dict = {}
 
-        message_count = session.get_message_count()
-
+        # FULL intelligence extraction from ALL messages (including just-added scammer message)
         if message_count >= 1:
-            try:
-                early_intel = intelligence_extractor.extract_intelligence(request, session.messages)
-                early_intel_dict = deduplicate_intelligence(early_intel.model_dump())
+            all_messages = session.messages
 
-                repeat_info = await find_repeat_matches(request.sessionId, early_intel_dict)
+            try:
+                # Extract intelligence IMMEDIATELY from all conversation history
+                intelligence = intelligence_extractor.extract_intelligence(request, all_messages)
+
+                # Save intelligence to session state BEFORE AI response
+                session_manager.update_session(
+                    request.sessionId,
+                    intelligence=intelligence
+                )
+
+                # Deduplicate for strategy and repeat detection
+                intel_dict = deduplicate_intelligence(intelligence.model_dump())
+
+                # Check for repeat scammer patterns
+                repeat_info = await find_repeat_matches(request.sessionId, intel_dict)
                 if repeat_info and repeat_info.get("repeatScammer"):
                     repeat_matches_for_prompt = repeat_info.get("repeatMatches")
                     logger.info(
                         f"REPEAT SCAMMER detected - Session: {request.sessionId}, "
                         f"matched sessions: {repeat_info.get('repeatSessionIds')}"
                     )
+
+                logger.info(
+                    f"📊 PRE-EXTRACTION Complete - Session: {request.sessionId}, "
+                    f"Phones: {len(intelligence.phoneNumbers)}, UPIs: {len(intelligence.upiIds)}, "
+                    f"Banks: {len(intelligence.bankAccounts)}, Links: {len(intelligence.phishingLinks)}"
+                )
+
             except Exception as exc:
-                logger.error(f"Early repeat detection failed (non-blocking): {exc}")
+                logger.error(f"Pre-extraction failed (non-blocking): {exc}")
+                # Create empty intelligence object as fallback
+                from app.models.responses import ExtractedIntelligence
+                intelligence = ExtractedIntelligence()
+                intel_dict = {}
 
         # -----------------------------------------------------------------
         # INITIALIZE/RETRIEVE CONVERSATION STRATEGY
@@ -283,7 +307,7 @@ async def handle_conversation(
             logger.info(f"Initialized conversation strategy - Session: {request.sessionId}")
 
         # -----------------------------------------------------------------
-        # GENERATE AGENT RESPONSE (with strategic extraction guidance)
+        # GENERATE AGENT RESPONSE (with FULL extracted intelligence context)
         # -----------------------------------------------------------------
         logger.info(f"Generating agent response - Session: {request.sessionId}")
 
@@ -293,8 +317,8 @@ async def handle_conversation(
             f"Session: {request.sessionId}"
         )
 
-        # Pass extracted intelligence to strategy for informed extraction
-        known_intel = early_intel_dict if early_intel_dict else {}
+        # Pass FULL extracted intelligence to AI for literate prompting
+        known_intel = intel_dict if intelligence else {}
 
         agent_response = await ai_agent.generate_response(
             request,
@@ -315,37 +339,25 @@ async def handle_conversation(
         )
         session_manager.add_message_to_session(request.sessionId, agent_message)
 
-       
+
         # -----------------------------------------------------------------
-        # FULL INTELLIGENCE EXTRACTION + FORENSIC REPORT (turn 3+)
+        # POST-RESPONSE: GENERATE AGENT NOTES (intelligence already extracted)
         # -----------------------------------------------------------------
-        intelligence = None
         agent_notes = ""
         message_count = session.get_message_count()
 
-        # Always extract intelligence - honeypot fail-open philosophy
-        # Extract from EVERY turn including turn 1 (initial message may contain data)
-        if message_count >= 1:
+        # Intelligence was already extracted BEFORE response generation
+        # Now generate forensic notes for callback
+        if intelligence:
             all_messages = session.messages
-
-            intelligence = intelligence_extractor.extract_intelligence(request, all_messages)
-
             agent_notes = intelligence_extractor.generate_agent_notes(
                 request, all_messages, intelligence
             )
-
-            # Save intelligence in memory
-            session_manager.update_session(
-                request.sessionId,
-                intelligence=intelligence
-            )
-
-            # Re-run repeat detection with full intelligence
-            try:
-                intel_dict = deduplicate_intelligence(intelligence.model_dump())
-                repeat_info = await find_repeat_matches(request.sessionId, intel_dict)
-            except Exception as exc:
-                logger.error(f"Repeat detection failed (non-blocking): {exc}")
+        else:
+            # Fallback: create empty intelligence if somehow missed
+            from app.models.responses import ExtractedIntelligence
+            intelligence = ExtractedIntelligence()
+            agent_notes = "No intelligence extracted yet."
 
             # Generate forensic PDF report and store in MongoDB
             # Strategy: Generate at message 3, then update every 3 messages (6, 9, 12, etc.)
