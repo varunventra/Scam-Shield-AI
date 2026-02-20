@@ -270,31 +270,45 @@ def build_extraction_strategy_prompt(
             lines.append(f"  - {item}")
         lines.append("")
 
-        # Check what was JUST collected (new in this turn) for failure-pivoting
+        # CONDITIONAL FAILURE-PIVOTING LOGIC
+        # Only trigger if:
+        # 1. We're past Turn 1 (strategy.turn_count >= 2)
+        # 2. We have exactly 1 item of a type (just received it)
+        # 3. We haven't used the pivot for this type yet
         should_failure_pivot = False
         pivot_type = None
         pivot_phrase = None
 
-        # Determine if we should do a failure-pivot (ONCE per type)
-        if strategy.info_collected.get("upi_ids") and not strategy.failure_pivot_used.get("upi"):
-            should_failure_pivot = True
-            pivot_type = "upi"
-            pivot_phrase = "I tried paying to that UPI ID but it's showing an error. Do you have another UPI or bank account number?"
+        # CRITICAL: Only feign failure AFTER receiving data (not on Turn 1)
+        if strategy.turn_count >= 2:
+            # Check UPI - only if we have exactly 1 (just received)
+            if (len(strategy.info_collected.get("upi_ids", [])) == 1 and
+                not strategy.failure_pivot_used.get("upi")):
+                should_failure_pivot = True
+                pivot_type = "upi"
+                pivot_phrase = "I tried paying to that UPI ID but it's showing an error. Do you have another UPI or bank account number?"
 
-        elif strategy.info_collected.get("links") and not strategy.failure_pivot_used.get("link"):
-            should_failure_pivot = True
-            pivot_type = "link"
-            pivot_phrase = "I clicked that link but it's not opening on my phone. Can you send a different link or your email address?"
+            # Check Links - only if we have exactly 1 (just received)
+            elif (len(strategy.info_collected.get("links", [])) == 1 and
+                  not strategy.failure_pivot_used.get("link")):
+                should_failure_pivot = True
+                pivot_type = "link"
+                pivot_phrase = "I clicked that link but it's not opening on my phone. Can you send a different link or your email address?"
 
-        elif strategy.info_collected.get("bank_accounts") and not strategy.failure_pivot_used.get("bank"):
-            should_failure_pivot = True
-            pivot_type = "bank"
-            pivot_phrase = "I tried transferring to that account but bank is showing an error. Do you have another account number or UPI ID?"
+            # Check Bank Accounts - only if we have exactly 1 (just received)
+            elif (len(strategy.info_collected.get("bank_accounts", [])) == 1 and
+                  not strategy.failure_pivot_used.get("bank")):
+                should_failure_pivot = True
+                pivot_type = "bank"
+                pivot_phrase = "I tried transferring to that account but bank is showing an error. Do you have another account number or UPI ID?"
 
-        elif strategy.info_collected.get("phone_numbers") and not strategy.failure_pivot_used.get("phone"):
-            should_failure_pivot = True
-            pivot_type = "phone"
-            pivot_phrase = "I tried calling that number but it's not connecting. Do you have an alternate number or email?"
+            # Check Phone Numbers - only if we have exactly 1 core number (just received)
+            elif (len(strategy.info_collected.get("phone_numbers", [])) >= 1 and
+                  len(strategy.info_collected.get("phone_numbers", [])) <= 6 and  # 6 formats of 1 number
+                  not strategy.failure_pivot_used.get("phone")):
+                should_failure_pivot = True
+                pivot_type = "phone"
+                pivot_phrase = "I tried calling that number but it's not connecting. Do you have an alternate number or email?"
 
         if should_failure_pivot:
             lines.append("🎯 FAILURE-PIVOTING STRATEGY (MANDATORY THIS TURN - Info Elicitation Scoring):")
