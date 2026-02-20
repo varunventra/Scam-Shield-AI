@@ -607,6 +607,9 @@ class HackathonEvaluator:
 
                 print(f"  ✅ Turn {turn}/10: {len(honeypot_reply)} chars")
 
+                # Add delay between turns to avoid overwhelming Render and allow processing time
+                await asyncio.sleep(2.5)  # 2.5 second delay between turns
+
                 # Use next scammer prompt or stop if out of prompts
                 if turn < len(scenario.scammer_prompts):
                     current_message = scenario.scammer_prompts[turn - 1]
@@ -651,43 +654,62 @@ class HackathonEvaluator:
         timestamp: int,
         conversation_history: List[Dict]
     ) -> Optional[Dict]:
-        """Send a message to the API."""
-        try:
-            payload = {
-                "sessionId": session_id,
-                "message": {
-                    "sender": "scammer",
-                    "text": message_text,
-                    "timestamp": timestamp
-                },
-                "conversationHistory": conversation_history,
-                "metadata": {
-                    "channel": "SMS",
-                    "language": "English",
-                    "locale": "IN",
-                    "callbackUrl": CALLBACK_URL  # Tell API where to send callback
-                }
-            }
+        """Send a message to the API with retry logic for transient errors."""
+        max_retries = 3
+        retry_delay = 3  # seconds
 
-            async with httpx.AsyncClient(timeout=35.0) as client:
-                response = await client.post(
-                    API_URL,
-                    json=payload,
-                    headers={
-                        "x-api-key": API_KEY,
-                        "Content-Type": "application/json"
+        for attempt in range(max_retries):
+            try:
+                payload = {
+                    "sessionId": session_id,
+                    "message": {
+                        "sender": "scammer",
+                        "text": message_text,
+                        "timestamp": timestamp
+                    },
+                    "conversationHistory": conversation_history,
+                    "metadata": {
+                        "channel": "SMS",
+                        "language": "English",
+                        "locale": "IN",
+                        "callbackUrl": CALLBACK_URL  # Tell API where to send callback
                     }
-                )
+                }
 
-                if response.status_code == 200:
-                    return response.json()
+                async with httpx.AsyncClient(timeout=45.0) as client:  # Increased timeout
+                    response = await client.post(
+                        API_URL,
+                        json=payload,
+                        headers={
+                            "x-api-key": API_KEY,
+                            "Content-Type": "application/json"
+                        }
+                    )
+
+                    if response.status_code == 200:
+                        return response.json()
+                    elif response.status_code == 502 and attempt < max_retries - 1:
+                        # 502 Bad Gateway - retry (common during Render cold starts)
+                        print(f"  ⚠️  502 error (attempt {attempt + 1}/{max_retries}), retrying in {retry_delay}s...")
+                        await asyncio.sleep(retry_delay)
+                        continue
+                    else:
+                        print(f"  ⚠️  Request failed: {response.status_code} - {response.text[:200]}")
+                        return None
+
+            except httpx.TimeoutException:
+                if attempt < max_retries - 1:
+                    print(f"  ⚠️  Timeout (attempt {attempt + 1}/{max_retries}), retrying in {retry_delay}s...")
+                    await asyncio.sleep(retry_delay)
+                    continue
                 else:
-                    print(f"  ⚠️  Request failed: {response.status_code} - {response.text}")
+                    print(f"  ⚠️  Request timed out after {max_retries} attempts")
                     return None
+            except Exception as e:
+                print(f"  ⚠️  Request failed: {e}")
+                return None
 
-        except Exception as e:
-            print(f"  ⚠️  Request failed: {e}")
-            return None
+        return None
 
     def generate_report(self):
         """Generate final evaluation report."""
