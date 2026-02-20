@@ -58,6 +58,7 @@ class Metadata(BaseModel):
     channel: Optional[str] = Field(None, description="Communication channel (SMS/WhatsApp/Email/Chat)")
     language: Optional[str] = Field(None, description="Language used in conversation")
     locale: Optional[str] = Field(None, description="Country or region code")
+    callbackUrl: Optional[str] = Field(None, description="Override callback URL for testing")
 
 
 class ConversationRequest(BaseModel):

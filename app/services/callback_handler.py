@@ -19,25 +19,30 @@ class CallbackHandler:
         self.callback_url = settings.guvi_callback_url
         self.timeout = 10.0  # seconds
 
-    async def send_final_result(self, payload: FinalResultPayload) -> bool:
+    async def send_final_result(self, payload: FinalResultPayload, callback_url: Optional[str] = None) -> bool:
         """
         Send final result to GUVI evaluation endpoint.
 
         Args:
             payload: Final result data to send
+            callback_url: Optional callback URL override (for testing). If not provided, uses default from settings.
 
         Returns:
             True if successful, False otherwise
         """
+        # Use provided callback_url or fall back to default from settings
+        target_url = callback_url or self.callback_url
+
         try:
             logger.info(
-                f"Sending final result to GUVI - Session: {payload.sessionId}, "
-                f"Scam: {payload.scamDetected}, Messages: {payload.totalMessagesExchanged}"
+                f"Sending final result to callback - Session: {payload.sessionId}, "
+                f"Scam: {payload.scamDetected}, Messages: {payload.totalMessagesExchanged}, "
+                f"URL: {target_url}"
             )
 
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
-                    self.callback_url,
+                    target_url,
                     json=payload.model_dump(),
                     headers={"Content-Type": "application/json"}
                 )

@@ -495,7 +495,12 @@ async def handle_conversation(
                 )
                 final_callback_payload_dict = final_payload.model_dump()
 
-                callback_success = await callback_handler.send_final_result(final_payload)
+                # Extract callback URL from metadata (for testing) or use default
+                callback_url_override = None
+                if request.metadata and hasattr(request.metadata, 'callbackUrl'):
+                    callback_url_override = request.metadata.callbackUrl
+
+                callback_success = await callback_handler.send_final_result(final_payload, callback_url=callback_url_override)
 
                 if callback_success:
                     callback_sent = True

@@ -1,16 +1,19 @@
+# -*- coding: utf-8 -*-
 """
-HACKATHON EVALUATION SIMULATOR
+🎯 COMPREHENSIVE HACKATHON EVALUATION SIMULATOR
 
-This test file simulates the EXACT evaluation environment from yes.pdf.
-It runs multiple scam scenarios with planted fake data and scores the API
-based on the official 100-point rubric.
+This test file simulates the EXACT evaluation environment from yes.pdf with:
+- Real callback endpoint to receive actual intelligence data
+- Comprehensive scoring based on 100-point rubric
+- Rigorous testing across multiple scenarios
+- Detailed analysis and recommendations
 
-Scoring Breakdown (100 points per scenario):
-1. Scam Detection (20 pts): scamDetected=true in final output
-2. Extracted Intelligence (30 pts): Extract planted phones, UPI IDs, bank accounts, links, emails, case IDs, policy numbers, order numbers
-3. Conversation Quality (30 pts): Turn count (8), Questions (4), Relevant questions (3), Red flags (8), Information elicitation (7)
+SCORING BREAKDOWN (100 points per scenario):
+1. Scam Detection (20 pts): scamDetected=true in callback
+2. Extracted Intelligence (30 pts): Extract ALL planted data (phones, UPIs, banks, links, emails, cases, policies, orders)
+3. Conversation Quality (30 pts): Turns (8), Questions (4), Relevant Q's (3), Red flags (8), Elicitation (7)
 4. Engagement Quality (10 pts): Duration (4pts max), Messages (6pts max)
-5. Response Structure (10 pts): Required/optional fields present
+5. Response Structure (10 pts): Required fields (6pts), Optional fields (4pts)
 
 Run with: python test_hackathon_eval.py
 """
@@ -22,9 +25,20 @@ import os
 import sys
 import time
 import uuid
+import re
 from datetime import datetime, timezone
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass, field
+from fastapi import FastAPI, Request
+import uvicorn
+import threading
+
+# Fix Windows Unicode encoding issues
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except:
+        pass
 
 # Load environment variables from .env file
 try:
@@ -39,9 +53,15 @@ except ImportError:
 # CONFIGURATION
 # ===================================================================
 
-# Try to load from environment, with fallback to localhost
-API_URL = os.getenv("TEST_API_URL") or os.getenv("BASE_URL", "http://localhost:8000") + "/api/v1/conversation"
+# API endpoint to test (your deployed Render URL + /api/v1/conversation)
+RENDER_URL = os.getenv("RENDER_URL", "http://localhost:8000")
+API_URL = RENDER_URL.rstrip('/') + "/api/v1/conversation"
 API_KEY = os.getenv("API_KEY")
+
+# Callback server configuration (local server to receive callbacks)
+CALLBACK_HOST = "127.0.0.1"
+CALLBACK_PORT = 8765  # Different from main API port
+CALLBACK_URL = f"http://{CALLBACK_HOST}:{CALLBACK_PORT}/callback"
 
 # Validate configuration
 if not API_KEY:
@@ -51,21 +71,21 @@ if not API_KEY:
     print("Please set API_KEY in your .env file:")
     print("  API_KEY=your-api-key-here")
     print()
-    print("Or set environment variable:")
-    print("  export API_KEY=your-api-key-here")
-    print("="*80)
     sys.exit(1)
 
-TIMEOUT = 30.0  # 30 second timeout per request
+print(f"✅ Configuration loaded:")
+print(f"   API URL: {API_URL}")
+print(f"   Callback Server: {CALLBACK_URL}")
+print()
 
 
 # ===================================================================
-# TEST SCENARIOS (Simulating GUVI Evaluation)
+# DATA MODELS
 # ===================================================================
 
 @dataclass
 class FakePlantedData:
-    """Fake data planted by evaluator that honeypot should extract."""
+    """Fake data planted in scammer messages for testing intelligence extraction."""
     phone_numbers: List[str] = field(default_factory=list)
     bank_accounts: List[str] = field(default_factory=list)
     upi_ids: List[str] = field(default_factory=list)
@@ -78,91 +98,164 @@ class FakePlantedData:
 
 @dataclass
 class TestScenario:
-    """A scam scenario to test the honeypot."""
+    """A single test scenario with planted fake data."""
     name: str
     scam_type: str
-    weight: float  # Scenario weight in final score (sum to 100%)
+    weight: float  # Weight in final score calculation (%)
     initial_message: str
     fake_data: FakePlantedData
-    max_turns: int = 10
-    scammer_prompts: List[str] = field(default_factory=list)  # Pre-scripted follow-up messages
+    scammer_prompts: List[str]  # AI-generated scammer responses
 
 
-# Define test scenarios matching the evaluation style
+# ===================================================================
+# TEST SCENARIOS (Comprehensive & Realistic)
+# ===================================================================
+
 SCENARIOS = [
     TestScenario(
-        name="Bank KYC Fraud",
+        name="Bank KYC Fraud (Aggressive)",
         scam_type="bank_fraud",
         weight=35.0,
-        initial_message="URGENT ALERT: Your SBI account KYC verification is pending. Account will be suspended in 24 hours if not completed. Reply immediately to verify.",
+        initial_message="🔴 URGENT: Your SBI account KYC verification is INCOMPLETE. Account will be PERMANENTLY BLOCKED in 12 hours. Reply IMMEDIATELY to avoid legal action!",
         fake_data=FakePlantedData(
-            phone_numbers=["+91-8877665544"],
-            bank_accounts=["234567890123"],
-            upi_ids=["sbi.kyc@okaxis"],
-            case_ids=["KYC-2024-45678"],
+            phone_numbers=["+91-8877665544", "8877665544"],
+            bank_accounts=["234567890123", "5678901234567"],
+            upi_ids=["sbi.kyc@okaxis", "sbicustomer@paytm"],
+            case_ids=["KYC-2024-45678", "CASE/2024/1234"],
+            phishing_links=["https://sbi-kyc-verify.scam/update?ref=KYC-2024-45678"],
         ),
         scammer_prompts=[
-            "Your KYC is incomplete. To avoid account freeze, please confirm your details.",
-            "This is SBI fraud prevention department. I need to verify your identity.",
-            "For verification, send Rs.1 to UPI: sbi.kyc@okaxis to confirm account activity.",
-            "What is your account number? We need it for KYC update case KYC-2024-45678.",
-            "Transfer to account 234567890123, IFSC: SBIN0001234 for immediate activation.",
-            "Call our helpline +91-8877665544 for any issues.",
-            "Your account will be blocked in 1 hour if you don't complete KYC now.",
-            "Please confirm the transaction reference number after payment.",
-            "This is final warning. Complete verification immediately.",
+            "This is SBI fraud prevention department. Your KYC is incomplete. Failure to comply will result in account suspension.",
+            "For immediate verification, send Re.1 to UPI: sbi.kyc@okaxis to confirm account activity. Ref: KYC-2024-45678",
+            "Transfer processing fee Rs.50 to account 234567890123, IFSC: SBIN0001234 for KYC activation.",
+            "What is your full account number? We need it to update KYC case CASE/2024/1234 in our system.",
+            "Call our 24x7 helpline +91-8877665544 immediately for urgent assistance.",
+            "Complete the verification at https://sbi-kyc-verify.scam/update?ref=KYC-2024-45678 within 1 hour.",
+            "Your account 5678901234567 will be debited Rs.500 penalty if KYC not completed by today.",
+            "Send Rs.100 to sbicustomer@paytm for document processing. This is mandatory as per RBI guidelines.",
+            "Final warning: Account freeze in progress. Call 8877665544 NOW!",
+            "Confirm the transaction ID after payment for instant KYC approval.",
         ],
     ),
 
     TestScenario(
-        name="LIC Policy Renewal Scam",
+        name="LIC Policy Renewal Scam (Multi-channel)",
         scam_type="insurance_fraud",
         weight=30.0,
-        initial_message="LIC ALERT: Your insurance policy POL987654321 has lapsed! All benefits will be lost in 24 hours. Pay renewal premium of Rs. 18,500 immediately to revive.",
+        initial_message="⚠️ LIC POLICY LAPSED: Dear policyholder, your LIC policy POL987654321 has expired! All benefits including maturity amount Rs.8,50,000 will be FORFEITED in 48 hours. Pay renewal premium Rs.18,500 immediately!",
         fake_data=FakePlantedData(
-            phone_numbers=["+91-7766554433"],
-            bank_accounts=["876543210987"],
-            upi_ids=["lic.renewal@paytm", "support@licrenew.com"],
-            phishing_links=["https://licrenewal.fake/verify?policy=POL987654321"],
-            email_addresses=["support@licrenew.com"],
-            policy_numbers=["POL987654321"],
+            phone_numbers=["+91-7766554433", "7766554433", "+91-9876543210"],
+            bank_accounts=["876543210987", "123456789012"],
+            upi_ids=["lic.renewal@paytm", "licofficial@okhdfc"],
+            phishing_links=["https://licrenewal.fake/verify?policy=POL987654321", "http://lic-india-renewal.scam/pay"],
+            email_addresses=["support@licrenew.com", "renewal@licindiaofficial.com"],
+            policy_numbers=["POL987654321", "LIC-2024-8765"],
+            case_ids=["RENEWAL-2024-5432"],
         ),
         scammer_prompts=[
-            "Dear customer, your LIC policy will expire today. Pay renewal amount immediately.",
-            "For renewal, transfer Rs.18,500 to UPI: lic.renewal@paytm or call +91-7766554433.",
-            "Visit our secure portal: https://licrenewal.fake/verify?policy=POL987654321 to pay online.",
-            "You can also transfer to account 876543210987, IFSC HDFC0001234.",
-            "Email your payment receipt to support@licrenew.com for instant activation.",
-            "Your policy POL987654321 will be permanently closed in 2 hours.",
-            "Many customers renewed successfully today. Don't miss this opportunity.",
-            "Contact our support team immediately for assistance.",
+            "Dear customer, your LIC policy POL987654321 will expire in 24 hours. All coverage will be permanently lost.",
+            "Immediate action required! Transfer Rs.18,500 renewal premium to UPI: lic.renewal@paytm",
+            "For assistance, call our customer care: +91-7766554433 or WhatsApp: +91-9876543210",
+            "Pay online at: https://licrenewal.fake/verify?policy=POL987654321 (secure payment gateway)",
+            "Bank transfer option: Account 876543210987, IFSC: HDFC0001234, Beneficiary: LIC Renewal Services",
+            "Email your payment receipt to support@licrenew.com for instant policy reactivation.",
+            "Your case RENEWAL-2024-5432 will be closed permanently if no payment received today.",
+            "Alternative payment: Visit http://lic-india-renewal.scam/pay and use policy LIC-2024-8765",
+            "Contact renewal@licindiaofficial.com or pay to licofficial@okhdfc for express processing.",
+            "Transfer to account 123456789012 for overnight policy revival with bonus benefits!",
         ],
     ),
 
     TestScenario(
-        name="UPI Cashback Fraud",
+        name="UPI Cashback Fraud (Lottery-style)",
         scam_type="upi_fraud",
         weight=35.0,
-        initial_message="Congratulations! You've won Rs.50,000 cashback in our PhonePe anniversary offer! Click here to claim: http://phonepe-reward.scam/claim?id=CB12345",
+        initial_message="🎉 CONGRATULATIONS! You've WON Rs.1,50,000 cashback in PhonePe 10th Anniversary MEGA OFFER! 🎁 Claim NOW: http://phonepe-reward.scam/claim?id=CB12345 (Offer valid for 6 hours only!)",
         fake_data=FakePlantedData(
-            phone_numbers=["+91-9988776655"],
-            upi_ids=["cashback.claim@ybl", "phonepe.rewards@paytm"],
-            phishing_links=["http://phonepe-reward.scam/claim?id=CB12345", "http://phonepe-reward.scam/verify"],
-            email_addresses=["rewards@phonepe-offers.com"],
-            order_numbers=["CB12345", "REWARD-2024-5678"],
+            phone_numbers=["+91-9988776655", "9988776655", "+91-8899001122"],
+            upi_ids=["cashback.claim@ybl", "phonepe.rewards@paytm", "verification@phonepe"],
+            phishing_links=[
+                "http://phonepe-reward.scam/claim?id=CB12345",
+                "http://phonepe-reward.scam/verify",
+                "https://phonepe-anniversary.fake/redeem?order=REWARD-2024-5678"
+            ],
+            email_addresses=["rewards@phonepe-offers.com", "claims@phonepeanniversary.com"],
+            order_numbers=["CB12345", "REWARD-2024-5678", "ORDER-9876543"],
         ),
         scammer_prompts=[
-            "To claim your Rs.50,000 reward, send Re.1 to cashback.claim@ybl for verification.",
-            "This is a limited-time offer! Valid only today for order CB12345.",
-            "Call our helpline +91-9988776655 to activate your reward instantly.",
-            "Visit http://phonepe-reward.scam/verify and enter your UPI PIN to process the cashback.",
-            "For queries, email rewards@phonepe-offers.com with reference REWARD-2024-5678.",
-            "You can also pay the processing fee to phonepe.rewards@paytm.",
-            "Hurry! Only 2 hours left to claim your cashback.",
-            "Share your bank account details to receive the prize money directly.",
+            "To claim Rs.1,50,000 reward, send Re.1 verification fee to cashback.claim@ybl (order CB12345)",
+            "This is a ONE-TIME offer! Valid only today for order REWARD-2024-5678. Don't miss out!",
+            "Call our prize claim helpline: +91-9988776655 or SMS 'CLAIM' to 8899001122",
+            "Visit http://phonepe-reward.scam/verify and enter UPI PIN to process instant cashback transfer.",
+            "For queries, email rewards@phonepe-offers.com with reference ORDER-9876543",
+            "Pay Rs.500 processing fee to phonepe.rewards@paytm for government tax clearance (mandatory)",
+            "Claim at https://phonepe-anniversary.fake/redeem?order=REWARD-2024-5678 before 11:59 PM!",
+            "Hurry! Only 127 winners selected nationwide. Send account details to claims@phonepeanniversary.com",
+            "Final verification: Pay Re.1 to verification@phonepe and receive Rs.1,50,000 within 30 minutes!",
+            "LIMITED TIME: Share this with 5 friends to double your cashback to Rs.3,00,000! Call 9988776655 now!",
         ],
     ),
 ]
+
+
+# ===================================================================
+# CALLBACK SERVER (Receives real callbacks from API)
+# ===================================================================
+
+class CallbackServer:
+    """Local HTTP server to receive callbacks from the honeypot API."""
+
+    def __init__(self):
+        self.app = FastAPI()
+        self.callbacks: Dict[str, Dict] = {}  # sessionId -> callback_data
+        self.server = None
+        self.thread = None
+
+        # Register callback endpoint
+        @self.app.post("/callback")
+        async def receive_callback(request: Request):
+            """Receive callback from honeypot API."""
+            try:
+                data = await request.json()
+                session_id = data.get("sessionId")
+                if session_id:
+                    self.callbacks[session_id] = data
+                    print(f"  ✅ Callback received for session: {session_id[:8]}...")
+                return {"status": "success"}
+            except Exception as e:
+                print(f"  ❌ Callback error: {e}")
+                return {"status": "error", "message": str(e)}
+
+    def start(self):
+        """Start callback server in background thread."""
+        def run_server():
+            config = uvicorn.Config(
+                self.app,
+                host=CALLBACK_HOST,
+                port=CALLBACK_PORT,
+                log_level="error"  # Suppress uvicorn logs
+            )
+            self.server = uvicorn.Server(config)
+            asyncio.run(self.server.serve())
+
+        self.thread = threading.Thread(target=run_server, daemon=True)
+        self.thread.start()
+        time.sleep(2)  # Wait for server to start
+        print(f"✅ Callback server started at {CALLBACK_URL}\n")
+
+    def stop(self):
+        """Stop callback server."""
+        if self.server:
+            self.server.should_exit = True
+
+    def get_callback(self, session_id: str, timeout: int = 15) -> Optional[Dict]:
+        """Wait for and retrieve callback for a session."""
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            if session_id in self.callbacks:
+                return self.callbacks[session_id]
+            time.sleep(0.5)
+        return None
 
 
 # ===================================================================
@@ -170,7 +263,7 @@ SCENARIOS = [
 # ===================================================================
 
 class ScenarioScorer:
-    """Scores a scenario based on the official rubric."""
+    """Scores a scenario based on yes.pdf evaluation rubric."""
 
     def __init__(self, scenario: TestScenario):
         self.scenario = scenario
@@ -195,9 +288,10 @@ class ScenarioScorer:
             "response_structure": self._score_response_structure(),
         }
 
-        scores["total"] = sum(scores.values())
+        total = sum(scores.values())
+        scores["total"] = total
         scores["max_possible"] = 100
-        scores["percentage"] = (scores["total"] / scores["max_possible"]) * 100
+        scores["percentage"] = (total / 100) * 100
 
         return scores
 
@@ -269,6 +363,7 @@ class ScenarioScorer:
             if self._check_extracted(order, intel.get("orderNumbers", [])):
                 matched_fields += 1
 
+        # Calculate score
         if total_fields == 0:
             return 0.0
 
@@ -277,6 +372,10 @@ class ScenarioScorer:
 
     def _check_extracted(self, fake_value: str, extracted_list: List[str]) -> bool:
         """Check if fake value was extracted (fuzzy matching)."""
+        if not extracted_list:
+            return False
+
+        # Normalize for comparison
         fake_normalized = fake_value.replace("+91-", "").replace("+91", "").replace("-", "").replace(" ", "").lower()
 
         for extracted in extracted_list:
@@ -286,13 +385,13 @@ class ScenarioScorer:
         return False
 
     def _score_conversation_quality(self) -> float:
-        """Score: 30 points total (Turn count: 8, Questions: 4, Relevant: 3, Red flags: 8, Elicitation: 7)."""
+        """Score: 30 points total (Turn count: 8, Questions: 4, Relevant Q: 3, Red flags: 8, Elicitation: 7)."""
+        score = 0.0
+
         # Analyze conversation
         self._analyze_conversation()
 
-        score = 0.0
-
-        # Turn count (8 pts): ≥8=8pts, ≥6=6pts, ≥4=3pts
+        # Turn count (8 pts max)
         if self.turn_count >= 8:
             score += 8.0
         elif self.turn_count >= 6:
@@ -300,7 +399,7 @@ class ScenarioScorer:
         elif self.turn_count >= 4:
             score += 3.0
 
-        # Questions asked (4 pts): ≥5=4pts, ≥3=2pts, ≥1=1pt
+        # Questions asked (4 pts max)
         if self.questions_asked >= 5:
             score += 4.0
         elif self.questions_asked >= 3:
@@ -308,7 +407,7 @@ class ScenarioScorer:
         elif self.questions_asked >= 1:
             score += 1.0
 
-        # Relevant questions (3 pts): ≥3=3pts, ≥2=2pts, ≥1=1pt
+        # Relevant investigative questions (3 pts max)
         if self.relevant_questions >= 3:
             score += 3.0
         elif self.relevant_questions >= 2:
@@ -316,7 +415,7 @@ class ScenarioScorer:
         elif self.relevant_questions >= 1:
             score += 1.0
 
-        # Red flag identification (8 pts): ≥5=8pts, ≥3=5pts, ≥1=2pts
+        # Red flag identification (8 pts max)
         if self.red_flags_identified >= 5:
             score += 8.0
         elif self.red_flags_identified >= 3:
@@ -324,41 +423,51 @@ class ScenarioScorer:
         elif self.red_flags_identified >= 1:
             score += 2.0
 
-        # Information elicitation (7 pts): Each attempt = 1.5pts (max 7)
+        # Information elicitation (7 pts max, 1.5 per attempt)
         elicitation_score = min(self.information_elicitation_attempts * 1.5, 7.0)
         score += elicitation_score
 
-        return score
+        return min(score, 30.0)
 
     def _analyze_conversation(self):
         """Analyze conversation for quality metrics."""
         honeypot_messages = [msg for msg in self.conversation_history if msg.get("sender") == "user"]
-
         self.turn_count = len(honeypot_messages)
 
-        # Keywords for analysis
-        question_words = ["what", "which", "where", "who", "how", "can", "could", "should", "?"]
-        investigative_words = ["number", "account", "upi", "branch", "id", "employee", "email", "website", "link", "phone", "call", "contact"]
-        red_flag_words = ["urgent", "immediately", "blocked", "suspended", "otp", "pin", "verify", "confirm"]
-        elicitation_phrases = ["give me", "send me", "what is your", "can you", "where should"]
+        # Count questions (messages ending with ?)
+        self.questions_asked = sum(1 for msg in honeypot_messages if "?" in msg.get("text", ""))
 
+        # Detect relevant investigative questions
+        investigative_keywords = [
+            "who", "what", "where", "when", "why", "how",
+            "name", "company", "department", "address", "website",
+            "verify", "confirm", "proof", "identity", "badge", "id"
+        ]
         for msg in honeypot_messages:
-            text = msg.get("text", "").lower()
+            text_lower = msg.get("text", "").lower()
+            if "?" in text_lower and any(kw in text_lower for kw in investigative_keywords):
+                self.relevant_questions += 1
 
-            # Count questions
-            if "?" in text or any(word in text for word in question_words):
-                self.questions_asked += 1
+        # Detect red flag identification
+        red_flag_keywords = [
+            "urgent", "suspicious", "unusual", "verify", "cautious", "concerned",
+            "why", "never", "don't understand", "sounds strange", "seems odd"
+        ]
+        for msg in honeypot_messages:
+            text_lower = msg.get("text", "").lower()
+            if any(kw in text_lower for kw in red_flag_keywords):
+                self.red_flags_identified += 1
 
-                # Count relevant/investigative questions
-                if any(word in text for word in investigative_words):
-                    self.relevant_questions += 1
-                    self.information_elicitation_attempts += 1
-
-            # Count red flag references
-            for flag_word in red_flag_words:
-                if flag_word in text:
-                    self.red_flags_identified += 1
-                    break  # Count once per message
+        # Detect information elicitation attempts
+        elicitation_phrases = [
+            "your name", "company name", "department", "office address",
+            "phone number", "email", "website", "supervisor", "employee id",
+            "call you", "contact", "toll free"
+        ]
+        for msg in honeypot_messages:
+            text_lower = msg.get("text", "").lower()
+            if any(phrase in text_lower for phrase in elicitation_phrases):
+                self.information_elicitation_attempts += 1
 
     def _score_engagement_quality(self) -> float:
         """Score: 10 points total (Duration: 4pts max, Messages: 6pts max)."""
@@ -372,21 +481,21 @@ class ScenarioScorer:
 
         # Duration scoring (4 pts max)
         if duration > 180:
-            score += 4.0  # 1 + 2 + 1
+            score += 4.0
         elif duration > 60:
-            score += 3.0  # 1 + 2
+            score += 2.0
         elif duration > 0:
             score += 1.0
 
-        # Messages scoring (6 pts max)
+        # Message count scoring (6 pts max)
         if messages >= 10:
-            score += 6.0  # 2 + 3 + 1
+            score += 6.0
         elif messages >= 5:
-            score += 5.0  # 2 + 3
+            score += 3.0
         elif messages > 0:
             score += 2.0
 
-        return score
+        return min(score, 10.0)
 
     def _score_response_structure(self) -> float:
         """Score: 10 points total (Required fields: 6pts, Optional fields: 4pts)."""
@@ -425,23 +534,22 @@ class ScenarioScorer:
 
 
 # ===================================================================
-# EVALUATION ENGINE
+# EVALUATION ORCHESTRATOR
 # ===================================================================
 
 class HackathonEvaluator:
-    """Simulates the hackathon evaluation system."""
+    """Orchestrates the complete hackathon evaluation."""
 
-    def __init__(self, api_url: str, api_key: str):
-        self.api_url = api_url
-        self.api_key = api_key
+    def __init__(self, callback_server: CallbackServer):
+        self.callback_server = callback_server
         self.results = []
 
     async def run_evaluation(self):
-        """Run all test scenarios and generate report."""
+        """Run complete evaluation across all scenarios."""
         print("="*80)
         print("🎯 HACKATHON EVALUATION SIMULATOR")
         print("="*80)
-        print(f"API Endpoint: {self.api_url}")
+        print(f"API Endpoint: {API_URL}")
         print(f"Test Scenarios: {len(SCENARIOS)}")
         print("="*80)
         print()
@@ -452,6 +560,7 @@ class HackathonEvaluator:
             self.results.append(result)
             print()
 
+        # Generate final report
         self.generate_report()
 
     async def run_scenario(self, scenario: TestScenario) -> Dict:
@@ -460,47 +569,64 @@ class HackathonEvaluator:
         conversation = []
         final_output = None
 
-        # Initial message
-        current_message = scenario.initial_message
+        # Configure API to send callbacks to our local server (via environment variable)
+        # In production, you'd set GUVI_CALLBACK_URL to the test callback server
 
         try:
-            for turn in range(scenario.max_turns):
-                # Send message to API
-                response = await self.send_message(session_id, current_message, conversation)
+            # Initial message
+            current_message = scenario.initial_message
+
+            for turn in range(1, 11):  # Max 10 turns
+                timestamp = int(datetime.now(timezone.utc).timestamp() * 1000)
+
+                # Send scammer message to API
+                response = await self.send_message(
+                    session_id=session_id,
+                    message_text=current_message,
+                    timestamp=timestamp,
+                    conversation_history=conversation
+                )
 
                 if not response:
-                    print(f"  ❌ Turn {turn+1}: No response from API")
+                    print(f"  ❌ Turn {turn}: API request failed")
                     break
 
-                # Extract reply
-                reply = response.get("reply") or response.get("message") or response.get("text")
+                # Record conversation
+                conversation.append({
+                    "sender": "scammer",
+                    "text": current_message,
+                    "timestamp": timestamp
+                })
 
-                if not reply:
-                    print(f"  ❌ Turn {turn+1}: No reply field in response")
-                    break
+                honeypot_reply = response.get("reply") or response.get("message") or response.get("text", "")
+                conversation.append({
+                    "sender": "user",
+                    "text": honeypot_reply,
+                    "timestamp": timestamp + 1000
+                })
 
-                # Add to conversation
-                conversation.append({"sender": "scammer", "text": current_message, "timestamp": int(time.time() * 1000)})
-                conversation.append({"sender": "user", "text": reply, "timestamp": int(time.time() * 1000)})
+                print(f"  ✅ Turn {turn}/10: {len(honeypot_reply)} chars")
 
-                print(f"  ✅ Turn {turn+1}/{scenario.max_turns}: {len(reply)} chars")
-
-                # Get next scammer message (if available)
+                # Use next scammer prompt or stop if out of prompts
                 if turn < len(scenario.scammer_prompts):
-                    current_message = scenario.scammer_prompts[turn]
+                    current_message = scenario.scammer_prompts[turn - 1]
                 else:
-                    # Evaluation complete
                     break
 
-                # Small delay between turns
-                await asyncio.sleep(0.5)
+            # Wait for callback
+            print(f"  ⏳ Waiting for callback...")
+            final_output = self.callback_server.get_callback(session_id, timeout=20)
 
-            # Wait for final output (simulating 10-second wait)
-            await asyncio.sleep(2)
-
-            # Get final output (we'll extract from last callback - in real eval, this comes from callback endpoint)
-            # For simulation, we construct it from the conversation
-            final_output = self.simulate_final_output(session_id, conversation)
+            if not final_output:
+                print(f"  ⚠️  No callback received! Using fallback scoring.")
+                # Fallback: minimal output for scoring
+                final_output = {
+                    "sessionId": session_id,
+                    "scamDetected": False,
+                    "extractedIntelligence": {},
+                    "totalMessagesExchanged": len(conversation),
+                    "engagementDurationSeconds": 0
+                }
 
         except Exception as e:
             print(f"  ❌ Error: {e}")
@@ -518,76 +644,50 @@ class HackathonEvaluator:
             "scores": scores,
         }
 
-    async def send_message(self, session_id: str, message: str, history: List[Dict]) -> Optional[Dict]:
+    async def send_message(
+        self,
+        session_id: str,
+        message_text: str,
+        timestamp: int,
+        conversation_history: List[Dict]
+    ) -> Optional[Dict]:
         """Send a message to the API."""
-        payload = {
-            "sessionId": session_id,
-            "message": {
-                "sender": "scammer",
-                "text": message,
-                "timestamp": int(time.time() * 1000),
-            },
-            "conversationHistory": history,
-            "metadata": {
-                "channel": "SMS",
-                "language": "English",
-                "locale": "IN",
-            },
-        }
-
         try:
-            async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            payload = {
+                "sessionId": session_id,
+                "message": {
+                    "sender": "scammer",
+                    "text": message_text,
+                    "timestamp": timestamp
+                },
+                "conversationHistory": conversation_history,
+                "metadata": {
+                    "channel": "SMS",
+                    "language": "English",
+                    "locale": "IN",
+                    "callbackUrl": CALLBACK_URL  # Tell API where to send callback
+                }
+            }
+
+            async with httpx.AsyncClient(timeout=35.0) as client:
                 response = await client.post(
-                    self.api_url,
+                    API_URL,
                     json=payload,
                     headers={
-                        "Content-Type": "application/json",
-                        "x-api-key": self.api_key,
-                    },
+                        "x-api-key": API_KEY,
+                        "Content-Type": "application/json"
+                    }
                 )
 
                 if response.status_code == 200:
                     return response.json()
                 else:
-                    print(f"  ⚠️  API returned {response.status_code}: {response.text[:100]}")
+                    print(f"  ⚠️  Request failed: {response.status_code} - {response.text}")
                     return None
 
         except Exception as e:
             print(f"  ⚠️  Request failed: {e}")
             return None
-
-    def simulate_final_output(self, session_id: str, conversation: List[Dict]) -> Dict:
-        """Simulate the final output that would be sent to callback."""
-        # In real evaluation, this comes from the callback endpoint
-        # For testing, we create a mock final output
-
-        honeypot_messages = [msg for msg in conversation if msg.get("sender") == "user"]
-        total_messages = len(conversation)
-
-        if total_messages >= 2:
-            duration = int((conversation[-1]["timestamp"] - conversation[0]["timestamp"]) / 1000)
-        else:
-            duration = 0
-
-        return {
-            "sessionId": session_id,
-            "scamDetected": True,  # We expect this to be True
-            "scamType": "unknown",
-            "confidenceLevel": 0.9,
-            "totalMessagesExchanged": total_messages,
-            "engagementDurationSeconds": duration,
-            "extractedIntelligence": {
-                "phoneNumbers": [],
-                "bankAccounts": [],
-                "upiIds": [],
-                "phishingLinks": [],
-                "emailAddresses": [],
-                "caseIds": [],
-                "policyNumbers": [],
-                "orderNumbers": [],
-            },
-            "agentNotes": "Simulated agent notes",
-        }
 
     def generate_report(self):
         """Generate final evaluation report."""
@@ -606,7 +706,6 @@ class HackathonEvaluator:
             scores = result["scores"]
             scenario_score = scores.get("total", 0)
             weighted_contribution = (scenario_score * scenario.weight) / 100
-
             total_weighted_score += weighted_contribution
             total_weight += scenario.weight
 
@@ -623,16 +722,15 @@ class HackathonEvaluator:
             print(f"    - Response Structure: {scores.get('response_structure', 0):.1f}/10")
             print()
 
-        # Code quality (would be 10% in real evaluation)
-        code_quality_score = 8.0  # Assumed for simulation
-
         # Final score calculation
-        scenario_portion = total_weighted_score * 0.9  # 90% weight
-        final_score = scenario_portion + code_quality_score
+        weighted_scenario_score = total_weighted_score
+        code_quality_score = 8.0  # Assume 8/10 for code quality (manual review)
+
+        final_score = (weighted_scenario_score * 0.9) + code_quality_score
 
         print("="*80)
-        print(f"Weighted Scenario Score: {total_weighted_score:.2f}/100")
-        print(f"Scenario Portion (90%): {scenario_portion:.2f}")
+        print(f"Weighted Scenario Score: {weighted_scenario_score:.2f}/100")
+        print(f"Scenario Portion (90%): {weighted_scenario_score * 0.9:.2f}")
         print(f"Code Quality (10%): {code_quality_score}/10")
         print("="*80)
         print(f"FINAL SCORE: {final_score:.2f}/100")
@@ -642,35 +740,43 @@ class HackathonEvaluator:
         # Recommendations
         print("🎯 RECOMMENDATIONS:")
         print()
-
         for result in self.results:
-            scores = result["scores"]
             scenario = result["scenario"]
+            scores = result["scores"]
 
             if scores.get("scam_detection", 0) < 20:
-                print(f"  ⚠️  {scenario.name}: scamDetected not True - ensure callback always sets this to True")
+                print(f"  ⚠️  {scenario.name}: scamDetected not True - check detection logic")
 
             if scores.get("extracted_intelligence", 0) < 20:
-                print(f"  ⚠️  {scenario.name}: Missing intelligence extraction - improve regex patterns")
+                print(f"  ⚠️  {scenario.name}: Low intelligence extraction - verify regex patterns and callback")
 
             if scores.get("conversation_quality", 0) < 20:
-                print(f"  ⚠️  {scenario.name}: Low conversation quality - ask more questions")
+                print(f"  ⚠️  {scenario.name}: Poor conversation quality - increase turns, questions, red flags")
 
             if scores.get("engagement_quality", 0) < 7:
-                print(f"  ⚠️  {scenario.name}: Low engagement - extend conversations to 10+ turns and 180+ seconds")
+                print(f"  ⚠️  {scenario.name}: Low engagement - aim for 180+ seconds, 10+ messages")
 
         print()
         print("✅ Evaluation complete!")
 
 
 # ===================================================================
-# MAIN ENTRY POINT
+# MAIN EXECUTION
 # ===================================================================
 
 async def main():
-    """Main entry point."""
-    evaluator = HackathonEvaluator(API_URL, API_KEY)
-    await evaluator.run_evaluation()
+    """Main execution function."""
+    # Start callback server
+    callback_server = CallbackServer()
+    callback_server.start()
+
+    try:
+        # Run evaluation
+        evaluator = HackathonEvaluator(callback_server)
+        await evaluator.run_evaluation()
+    finally:
+        # Stop callback server
+        callback_server.stop()
 
 
 if __name__ == "__main__":
