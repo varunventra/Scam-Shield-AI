@@ -36,6 +36,27 @@ class IntelligenceExtractor:
     AMOUNT_PATTERN = r'(?:Rs\.?|₹|INR)\s*(\d+(?:,\d+)*(?:\.\d+)?)'
     EMPLOYEE_ID_PATTERN = r'(?:employee\s*id|emp\s*id|staff\s*id|emp\.?\s*no)[\s:]+([A-Z0-9]+)'
 
+    # Case ID patterns: CASE-12345, FIR-2024-12345, REF-ABC123, CAS/2024/12345
+    CASE_ID_PATTERN = (
+        r'(?:case|fir|complaint|reference|ref|ticket|incident|report)[\s:#-]*'
+        r'(?:no\.?|number|id)?[\s:#-]*'
+        r'([A-Z]{0,5}[-/]?\d{3,}[-/A-Z0-9]*)'
+    )
+
+    # Policy number patterns: POL123456789, POLICY-12345, LIC-POL-12345
+    POLICY_NUMBER_PATTERN = (
+        r'(?:policy|pol|insurance)[\s:#-]*'
+        r'(?:no\.?|number|id)?[\s:#-]*'
+        r'([A-Z]{0,5}[-/]?\d{3,}[-/A-Z0-9]*)'
+    )
+
+    # Order number patterns: ORD-12345, ORDER#12345, OD1234567890
+    ORDER_NUMBER_PATTERN = (
+        r'(?:order|ord|tracking|shipment|parcel|consignment|awb)[\s:#-]*'
+        r'(?:no\.?|number|id)?[\s:#-]*'
+        r'([A-Z]{0,5}[-/]?\d{3,}[-/A-Z0-9]*)'
+    )
+
     # Company/Bank names
     BANK_NAMES = [
         'sbi', 'state bank', 'hdfc', 'icici', 'axis', 'pnb', 'punjab national',
@@ -105,6 +126,11 @@ class IntelligenceExtractor:
         amounts = self._extract_amounts(all_text)
         employee_ids = self._extract_employee_ids(all_text)
 
+        # Extract evaluation-scored data types (case IDs, policy numbers, order numbers)
+        case_ids = self._extract_case_ids(all_text)
+        policy_numbers = self._extract_policy_numbers(all_text)
+        order_numbers = self._extract_order_numbers(all_text)
+
         # Extract company/bank names
         impersonation_targets = self._extract_companies_banks(scammer_text)
 
@@ -127,6 +153,9 @@ class IntelligenceExtractor:
             phoneNumbers=list(set(phone_numbers)),
             emailAddresses=unique_emails,  # Evaluation-visible field
             suspiciousKeywords=list(set(suspicious_keywords)),
+            caseIds=list(set(case_ids)),  # Evaluation-scored
+            policyNumbers=list(set(policy_numbers)),  # Evaluation-scored
+            orderNumbers=list(set(order_numbers)),  # Evaluation-scored
             emails=unique_emails,  # Internal duplicate
             amounts=list(set(amounts)),
             employeeIds=list(set(employee_ids)),
@@ -140,8 +169,9 @@ class IntelligenceExtractor:
             f"✅ Intelligence extracted - Session: {request.sessionId}, "
             f"Banks: {len(bank_accounts)}, UPI: {len(upi_ids)}, "
             f"Links: {len(phishing_links)}, Phones: {len(phone_numbers)}, "
-            f"Emails: {len(emails)}, Amounts: {len(amounts)}, "
-            f"Targets: {len(impersonation_targets)}, Keywords: {len(suspicious_keywords)}"
+            f"Emails: {len(emails)}, Cases: {len(case_ids)}, "
+            f"Policies: {len(policy_numbers)}, Orders: {len(order_numbers)}, "
+            f"Keywords: {len(suspicious_keywords)}"
         )
 
         return intelligence
@@ -254,6 +284,70 @@ class IntelligenceExtractor:
             emp_ids.extend(matches)
 
         return list(set(emp_ids))
+
+    def _extract_case_ids(self, text: str) -> List[str]:
+        """Extract case/reference IDs from text."""
+        case_ids = []
+
+        # Regex-based extraction
+        matches = re.findall(self.CASE_ID_PATTERN, text, re.IGNORECASE)
+        case_ids.extend(matches)
+
+        # Also catch standalone alphanumeric IDs prefixed with known labels
+        standalone_patterns = [
+            r'\b(CAS[-/]?\d{3,}[-/A-Z0-9]*)\b',
+            r'\b(FIR[-/]?\d{3,}[-/A-Z0-9]*)\b',
+            r'\b(REF[-/]?\d{3,}[-/A-Z0-9]*)\b',
+            r'\b(COMP[-/]?\d{3,}[-/A-Z0-9]*)\b',
+            r'\b(TKT[-/]?\d{3,}[-/A-Z0-9]*)\b',
+            r'\b(INC[-/]?\d{3,}[-/A-Z0-9]*)\b',
+        ]
+        for pattern in standalone_patterns:
+            case_ids.extend(re.findall(pattern, text, re.IGNORECASE))
+
+        return list(set(c.strip() for c in case_ids if len(c) >= 4))
+
+    def _extract_policy_numbers(self, text: str) -> List[str]:
+        """Extract insurance/policy numbers from text."""
+        policy_numbers = []
+
+        # Regex-based extraction
+        matches = re.findall(self.POLICY_NUMBER_PATTERN, text, re.IGNORECASE)
+        policy_numbers.extend(matches)
+
+        # Catch standalone policy IDs
+        standalone_patterns = [
+            r'\b(POL[-/]?\d{3,}[-/A-Z0-9]*)\b',
+            r'\b(LIC[-/]?\d{3,}[-/A-Z0-9]*)\b',
+            r'\b(INS[-/]?\d{3,}[-/A-Z0-9]*)\b',
+            r'\b(POLICY[-/]?\d{3,}[-/A-Z0-9]*)\b',
+        ]
+        for pattern in standalone_patterns:
+            policy_numbers.extend(re.findall(pattern, text, re.IGNORECASE))
+
+        return list(set(p.strip() for p in policy_numbers if len(p) >= 4))
+
+    def _extract_order_numbers(self, text: str) -> List[str]:
+        """Extract order/tracking numbers from text."""
+        order_numbers = []
+
+        # Regex-based extraction
+        matches = re.findall(self.ORDER_NUMBER_PATTERN, text, re.IGNORECASE)
+        order_numbers.extend(matches)
+
+        # Catch standalone order IDs
+        standalone_patterns = [
+            r'\b(ORD[-/]?\d{3,}[-/A-Z0-9]*)\b',
+            r'\b(OD\d{6,})\b',
+            r'\b(ORDER[-/]?\d{3,}[-/A-Z0-9]*)\b',
+            r'\b(AWB[-/]?\d{3,}[-/A-Z0-9]*)\b',
+            r'\b(TRK[-/]?\d{3,}[-/A-Z0-9]*)\b',
+            r'\b(SHIP[-/]?\d{3,}[-/A-Z0-9]*)\b',
+        ]
+        for pattern in standalone_patterns:
+            order_numbers.extend(re.findall(pattern, text, re.IGNORECASE))
+
+        return list(set(o.strip() for o in order_numbers if len(o) >= 4))
 
     def _extract_companies_banks(self, text: str) -> List[str]:
         """Extract names of banks/companies being impersonated."""

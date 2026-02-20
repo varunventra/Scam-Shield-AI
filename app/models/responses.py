@@ -33,6 +33,11 @@ class ExtractedIntelligence(BaseModel):
     emailAddresses: List[str] = Field(default_factory=list, description="Email addresses extracted")
     suspiciousKeywords: List[str] = Field(default_factory=list, description="Suspicious keywords detected")
 
+    # === EVALUATION-SCORED FIELDS (case IDs, policy numbers, order numbers) ===
+    caseIds: List[str] = Field(default_factory=list, description="Case/reference IDs mentioned by scammer")
+    policyNumbers: List[str] = Field(default_factory=list, description="Policy numbers mentioned by scammer")
+    orderNumbers: List[str] = Field(default_factory=list, description="Order/tracking IDs mentioned by scammer")
+
     # === INTERNAL FIELDS (excluded from callback serialization) ===
     emails: List[str] = Field(default_factory=list, description="Email addresses (internal)", exclude=True)
     amounts: List[str] = Field(default_factory=list, description="Monetary amounts mentioned", exclude=True)
@@ -51,7 +56,10 @@ class FinalResultPayload(BaseModel):
     sessionId: str = Field(..., description="Session identifier")
     status: str = Field(default="completed", description="Session status")
     scamDetected: bool = Field(..., description="Whether scam was detected")
+    scamType: Optional[str] = Field(default=None, description="Detected scam type (e.g. bank_fraud, upi_fraud, phishing)")
+    confidenceLevel: Optional[float] = Field(default=None, description="Scam detection confidence 0.0-1.0")
     totalMessagesExchanged: int = Field(..., description="Total message count")
+    engagementDurationSeconds: int = Field(default=0, description="Total engagement duration in seconds")
     extractedIntelligence: ExtractedIntelligence = Field(..., description="Extracted intelligence data")
     engagementMetrics: EngagementMetrics = Field(
         default_factory=EngagementMetrics,
